@@ -4,7 +4,12 @@ from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-
+from .services import (
+    ask_local_model,
+    build_context_prompt,
+    build_rag_context_prompt,
+    list_local_models,
+)
 from .models import AIChatHistory, ChatSession, ChatMessage, KnowledgeDocument
 from .serializers import (
     AskAIRequestSerializer,
@@ -686,5 +691,30 @@ class StreamSessionRAGMessageView(APIView):
         except Exception as error:
             return Response(
                 {"success": False, "error": str(error)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+            
+            
+class LocalModelListView(APIView):
+    def get(self, request):
+        try:
+            models = list_local_models()
+
+            return Response(
+                {
+                    "success": True,
+                    "default_model": settings.DEFAULT_AI_MODEL,
+                    "count": len(models),
+                    "results": models,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as error:
+            return Response(
+                {
+                    "success": False,
+                    "error": str(error),
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

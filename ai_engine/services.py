@@ -87,3 +87,27 @@ Assistant:
 """
 
     return final_prompt
+
+
+def list_local_models():
+    url = f"{settings.OLLAMA_BASE_URL}/api/tags"
+
+    response = requests.get(url, timeout=30)
+
+    if response.status_code != 200:
+        raise Exception(f"Ollama API error: {response.text}")
+
+    data = response.json()
+
+    models = []
+
+    for item in data.get("models", []):
+        models.append(
+            {
+                "name": item.get("name"),
+                "size": item.get("size"),
+                "modified_at": item.get("modified_at"),
+            }
+        )
+
+    return models

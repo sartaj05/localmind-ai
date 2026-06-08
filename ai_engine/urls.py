@@ -13,6 +13,7 @@ from .views import (
     KnowledgeDocumentDetailView,
     SendSessionRAGMessageView,
     StreamSessionRAGMessageView,
+    LocalModelListView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -43,4 +44,5 @@ urlpatterns = [
         StreamSessionRAGMessageView.as_view(),
         name="stream-session-rag-message",
     ),
+    path("models/", LocalModelListView.as_view(), name="local-model-list"),
 ]
