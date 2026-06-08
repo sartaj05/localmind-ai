@@ -8,7 +8,7 @@ from .views import (
     ChatSessionDetailView,
     SendSessionMessageView,
 )
-
+from .views import StreamAIView
 urlpatterns = [
     path("ask/", AskAIView.as_view(), name="ask-ai"),
 
@@ -18,4 +18,9 @@ urlpatterns = [
     path("sessions/", ChatSessionListCreateView.as_view(), name="chat-session-list-create"),
     path("sessions/<int:pk>/", ChatSessionDetailView.as_view(), name="chat-session-detail"),
     path("sessions/<int:pk>/messages/", SendSessionMessageView.as_view(), name="send-session-message"),
+    path(
+        "stream/",
+        StreamAIView.as_view(),
+        name="stream-ai",
+    ),
 ]

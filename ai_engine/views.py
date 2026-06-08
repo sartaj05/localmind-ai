@@ -2,7 +2,8 @@ from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-
+from django.http import StreamingHttpResponse
+from .streaming import stream_ollama_response
 from .models import AIChatHistory, ChatSession, ChatMessage
 from .serializers import (
     AskAIRequestSerializer,
@@ -297,3 +298,44 @@ class SendSessionMessageView(APIView):
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+            
+class StreamAIView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        return Response(
+            {
+                "success": True,
+                "message": "This endpoint supports POST streaming only.",
+                "method": "POST",
+                "url": "/api/ai/stream/",
+                "example_body": {
+                    "prompt": "Explain Django ORM in simple words",
+                    "model": "phi3",
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        prompt = request.data.get("prompt")
+
+        if not prompt:
+            return Response(
+                {"success": False, "error": "Prompt required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        model = request.data.get("model")
+
+        generator = stream_ollama_response(
+            prompt=prompt,
+            model=model,
+        )
+
+        return StreamingHttpResponse(
+            generator,
+            content_type="text/plain",
+        )
