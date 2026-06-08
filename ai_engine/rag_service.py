@@ -8,11 +8,25 @@ from .models import KnowledgeDocument
 
 
 CHROMA_PATH = "chroma_db"
+COLLECTION_NAME = "localmind_knowledge"
 
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+embedding_model = None
 
 client = chromadb.PersistentClient(path=CHROMA_PATH)
-collection = client.get_or_create_collection(name="localmind_knowledge")
+collection = client.get_or_create_collection(name=COLLECTION_NAME)
+
+
+def get_embedding_model():
+    """
+    Lazy-load embedding model only when RAG is actually used.
+    This avoids loading HuggingFace model during makemigrations/migrate.
+    """
+    global embedding_model
+
+    if embedding_model is None:
+        embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    return embedding_model
 
 
 def chunk_text(text, chunk_size=500):
@@ -21,6 +35,7 @@ def chunk_text(text, chunk_size=500):
 
     for i in range(0, len(words), chunk_size):
         chunk = " ".join(words[i:i + chunk_size])
+
         if chunk.strip():
             chunks.append(chunk)
 
@@ -56,7 +71,9 @@ def extract_text_from_document(file_path):
 
 
 def clear_user_collection(user):
-    existing = collection.get(where={"user_id": user.id})
+    existing = collection.get(
+        where={"user_id": user.id}
+    )
 
     if existing and existing.get("ids"):
         collection.delete(ids=existing["ids"])
@@ -67,6 +84,8 @@ def build_knowledge_base(user):
 
     documents = KnowledgeDocument.objects.filter(user=user)
     chunk_count = 0
+
+    model = get_embedding_model()
 
     for document in documents:
         file_path = document.file.path
@@ -84,7 +103,7 @@ def build_knowledge_base(user):
         for index, chunk in enumerate(chunks):
             chunk_id = f"user_{user.id}_doc_{document.id}_chunk_{index}"
 
-            embedding = embedding_model.encode(chunk).tolist()
+            embedding = model.encode(chunk).tolist()
 
             collection.add(
                 ids=[chunk_id],
@@ -106,7 +125,9 @@ def build_knowledge_base(user):
 
 
 def search_knowledge(query, user, top_k=3):
-    query_embedding = embedding_model.encode(query).tolist()
+    model = get_embedding_model()
+
+    query_embedding = model.encode(query).tolist()
 
     results = collection.query(
         query_embeddings=[query_embedding],
@@ -122,6 +143,9 @@ def search_knowledge(query, user, top_k=3):
     for index, document in enumerate(documents):
         metadata = metadatas[index]
         source = metadata.get("source", "unknown")
-        context_parts.append(f"Source: {source}\nContent: {document}")
+
+        context_parts.append(
+            f"Source: {source}\nContent: {document}"
+        )
 
     return "\n\n".join(context_parts)
