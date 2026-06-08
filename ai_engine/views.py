@@ -14,8 +14,9 @@ from .serializers import (
     KnowledgeDocumentSerializer,
     RenameChatSessionSerializer,
     SendSessionMessageSerializer,
+    SendSessionRAGMessageSerializer,
 )
-from .services import ask_local_model, build_context_prompt
+from .services import ask_local_model, build_context_prompt, build_rag_context_prompt
 from .rag_service import build_knowledge_base, search_knowledge
 from .models import AIChatHistory, ChatSession, ChatMessage, KnowledgeDocument
 class AskAIView(APIView):
@@ -480,3 +481,85 @@ class KnowledgeDocumentDetailView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+        
+class SendSessionRAGMessageView(APIView):
+    def post(self, request, pk):
+        try:
+            session = ChatSession.objects.get(pk=pk)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = SendSessionRAGMessageSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_message = serializer.validated_data["message"]
+        model = serializer.validated_data.get("model") or session.model_name
+        top_k = serializer.validated_data.get("top_k") or 3
+
+        try:
+            rag_context = search_knowledge(
+                query=user_message,
+                top_k=top_k,
+            )
+
+            context_prompt = build_rag_context_prompt(
+                messages=session.messages,
+                new_message=user_message,
+                rag_context=rag_context,
+            )
+
+            ai_answer = ask_local_model(
+                prompt=context_prompt,
+                model=model,
+            )
+
+            ChatMessage.objects.create(
+                session=session,
+                role="user",
+                content=user_message,
+            )
+
+            assistant_message = ChatMessage.objects.create(
+                session=session,
+                role="assistant",
+                content=ai_answer,
+            )
+
+            session.model_name = model
+
+            if session.title == "New Chat":
+                session.title = user_message[:50]
+
+            session.save(update_fields=["model_name", "title", "updated_at"])
+
+            return Response(
+                {
+                    "success": True,
+                    "session_id": session.id,
+                    "model": model,
+                    "rag_context": rag_context,
+                    "user_message": user_message,
+                    "assistant_message": {
+                        "id": assistant_message.id,
+                        "role": assistant_message.role,
+                        "content": assistant_message.content,
+                        "created_at": assistant_message.created_at,
+                    },
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as error:
+            return Response(
+                {"success": False, "error": str(error)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

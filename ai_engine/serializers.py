@@ -92,3 +92,8 @@ class KnowledgeDocumentSerializer(serializers.ModelSerializer):
             "file",
             "uploaded_at",
         ]
+        
+class SendSessionRAGMessageSerializer(serializers.Serializer):
+    message = serializers.CharField(required=True, allow_blank=False)
+    model = serializers.CharField(required=False, allow_blank=True)
+    top_k = serializers.IntegerField(required=False, min_value=1, max_value=10)

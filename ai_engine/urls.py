@@ -11,6 +11,7 @@ from .views import (
     AskRAGView,
     KnowledgeDocumentListCreateView,
     KnowledgeDocumentDetailView,
+    SendSessionRAGMessageView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -31,4 +32,9 @@ urlpatterns = [
     path("rag/ask/", AskRAGView.as_view(), name="rag-ask"),
     path("documents/", KnowledgeDocumentListCreateView.as_view(), name="knowledge-documents"),
     path("documents/<int:pk>/", KnowledgeDocumentDetailView.as_view(), name="knowledge-document-detail"),
+    path(
+        "sessions/<int:pk>/rag-message/",
+        SendSessionRAGMessageView.as_view(),
+        name="send-session-rag-message",
+    ),
 ]
