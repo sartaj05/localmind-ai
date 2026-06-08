@@ -40,3 +40,12 @@ chroma_db/
 knowledge_base/
 media/
 *.safetensors
+.env
+venv/
+db.sqlite3
+media/
+chroma_db/
+*/migrations/*.py
+!*/migrations/__init__.py
+__pycache__/
+*.pyc
