@@ -15,7 +15,7 @@ from .serializers import (
     SendSessionMessageSerializer,
 )
 from .services import ask_local_model, build_context_prompt
-
+from .rag_service import build_knowledge_base, search_knowledge
 
 class AskAIView(APIView):
     def post(self, request):
@@ -339,3 +339,72 @@ class StreamAIView(APIView):
             generator,
             content_type="text/plain",
         )
+        
+class BuildKnowledgeBaseView(APIView):
+    def post(self, request):
+        try:
+            total_chunks = build_knowledge_base()
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "Knowledge base built successfully",
+                    "total_chunks": total_chunks,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as error:
+            return Response(
+                {"success": False, "error": str(error)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AskRAGView(APIView):
+    def post(self, request):
+        question = request.data.get("question")
+        model = request.data.get("model") or settings.DEFAULT_AI_MODEL
+
+        if not question:
+            return Response(
+                {"success": False, "error": "Question is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            context = search_knowledge(question)
+
+            prompt = f"""
+You are a helpful AI assistant. Answer the question only using the provided context.
+
+If the answer is not available in the context, say:
+"I do not have enough information in the uploaded knowledge base."
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:
+"""
+
+            answer = ask_local_model(prompt=prompt, model=model)
+
+            return Response(
+                {
+                    "success": True,
+                    "question": question,
+                    "model": model,
+                    "context": context,
+                    "answer": answer,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as error:
+            return Response(
+                {"success": False, "error": str(error)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

@@ -7,6 +7,8 @@ from .views import (
     ChatSessionListCreateView,
     ChatSessionDetailView,
     SendSessionMessageView,
+    BuildKnowledgeBaseView,
+    AskRAGView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -23,4 +25,6 @@ urlpatterns = [
         StreamAIView.as_view(),
         name="stream-ai",
     ),
+    path("rag/build/", BuildKnowledgeBaseView.as_view(), name="rag-build"),
+    path("rag/ask/", AskRAGView.as_view(), name="rag-ask"),
 ]

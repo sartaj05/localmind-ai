@@ -36,4 +36,6 @@ knowledge_base/uploads/
 models/
 *.bin
 *.gguf
+chroma_db/
+knowledge_base/
 *.safetensors
