@@ -111,3 +111,20 @@ def list_local_models():
         )
 
     return models
+
+def check_ollama_health():
+    url = f"{settings.OLLAMA_BASE_URL}/api/tags"
+
+    try:
+        response = requests.get(url, timeout=10)
+
+        return {
+            "available": response.status_code == 200,
+            "status_code": response.status_code,
+        }
+
+    except requests.RequestException as error:
+        return {
+            "available": False,
+            "error": str(error),
+        }

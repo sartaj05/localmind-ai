@@ -9,6 +9,7 @@ from .services import (
     build_context_prompt,
     build_rag_context_prompt,
     list_local_models,
+    check_ollama_health,
 )
 from .models import AIChatHistory, ChatSession, ChatMessage, KnowledgeDocument
 from .serializers import (
@@ -718,3 +719,22 @@ class LocalModelListView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+class AIHealthCheckView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        ollama = check_ollama_health()
+
+        return Response(
+            {
+                "success": True,
+                "django": {
+                    "available": True,
+                },
+                "ollama": ollama,
+                "default_model": settings.DEFAULT_AI_MODEL,
+            },
+            status=status.HTTP_200_OK,
+        )

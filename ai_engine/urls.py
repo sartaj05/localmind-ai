@@ -14,6 +14,7 @@ from .views import (
     SendSessionRAGMessageView,
     StreamSessionRAGMessageView,
     LocalModelListView,
+    AIHealthCheckView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -45,4 +46,5 @@ urlpatterns = [
         name="stream-session-rag-message",
     ),
     path("models/", LocalModelListView.as_view(), name="local-model-list"),
+    path("health/", AIHealthCheckView.as_view(), name="ai-health-check"),
 ]
