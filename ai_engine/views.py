@@ -1,10 +1,11 @@
 from django.conf import settings
+from django.http import StreamingHttpResponse
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.http import StreamingHttpResponse
-from .streaming import stream_ollama_response
-from .models import AIChatHistory, ChatSession, ChatMessage
+
+from .models import AIChatHistory, ChatSession, ChatMessage, KnowledgeDocument
 from .serializers import (
     AskAIRequestSerializer,
     AIChatHistorySerializer,
@@ -16,9 +17,12 @@ from .serializers import (
     SendSessionMessageSerializer,
     SendSessionRAGMessageSerializer,
 )
+from .pagination import StandardResultsSetPagination
 from .services import ask_local_model, build_context_prompt, build_rag_context_prompt
 from .rag_service import build_knowledge_base, search_knowledge
-from .models import AIChatHistory, ChatSession, ChatMessage, KnowledgeDocument
+from .streaming import stream_ollama_response
+
+
 class AskAIView(APIView):
     def post(self, request):
         serializer = AskAIRequestSerializer(data=request.data)
@@ -41,6 +45,7 @@ class AskAIView(APIView):
                 prompt=prompt,
                 response=answer,
             )
+
             return Response(
                 {
                     "success": True,
@@ -61,28 +66,35 @@ class AskAIView(APIView):
 
 class AIChatHistoryListView(APIView):
     def get(self, request):
-        chats = AIChatHistory.objects.filter(user=request.user)
-        serializer = AIChatHistorySerializer(chats, many=True)
+        search = request.query_params.get("search", "")
 
-        return Response(
+        chats = AIChatHistory.objects.filter(user=request.user)
+
+        if search:
+            chats = chats.filter(prompt__icontains=search)
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(chats, request)
+
+        serializer = AIChatHistorySerializer(page, many=True)
+
+        return paginator.get_paginated_response(
             {
                 "success": True,
-                "count": chats.count(),
                 "results": serializer.data,
-            },
-            status=status.HTTP_200_OK,
+            }
         )
 
 
 class AIChatHistoryDetailView(APIView):
-    def get_object(self, pk):
+    def get_object(self, request, pk):
         try:
-            return AIChatHistory.objects.get(pk=pk)
+            return AIChatHistory.objects.get(pk=pk, user=request.user)
         except AIChatHistory.DoesNotExist:
             return None
 
     def get(self, request, pk):
-        chat = self.get_object(pk)
+        chat = self.get_object(request, pk)
 
         if chat is None:
             return Response(
@@ -98,7 +110,7 @@ class AIChatHistoryDetailView(APIView):
         )
 
     def delete(self, request, pk):
-        chat = self.get_object(pk)
+        chat = self.get_object(request, pk)
 
         if chat is None:
             return Response(
@@ -116,16 +128,23 @@ class AIChatHistoryDetailView(APIView):
 
 class ChatSessionListCreateView(APIView):
     def get(self, request):
-        sessions = ChatSession.objects.filter(user=request.user)
-        serializer = ChatSessionSerializer(sessions, many=True)
+        search = request.query_params.get("search", "")
 
-        return Response(
+        sessions = ChatSession.objects.filter(user=request.user)
+
+        if search:
+            sessions = sessions.filter(title__icontains=search)
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(sessions, request)
+
+        serializer = ChatSessionSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
             {
                 "success": True,
-                "count": sessions.count(),
                 "results": serializer.data,
-            },
-            status=status.HTTP_200_OK,
+            }
         )
 
     def post(self, request):
@@ -145,6 +164,7 @@ class ChatSessionListCreateView(APIView):
             title=title,
             model_name=model,
         )
+
         response_serializer = ChatSessionSerializer(session)
 
         return Response(
@@ -158,14 +178,14 @@ class ChatSessionListCreateView(APIView):
 
 
 class ChatSessionDetailView(APIView):
-    def get_object(self, pk):
+    def get_object(self, request, pk):
         try:
             return ChatSession.objects.get(pk=pk, user=request.user)
         except ChatSession.DoesNotExist:
             return None
 
     def get(self, request, pk):
-        session = self.get_object(pk)
+        session = self.get_object(request, pk)
 
         if session is None:
             return Response(
@@ -181,7 +201,7 @@ class ChatSessionDetailView(APIView):
         )
 
     def patch(self, request, pk):
-        session = self.get_object(pk)
+        session = self.get_object(request, pk)
 
         if session is None:
             return Response(
@@ -212,7 +232,7 @@ class ChatSessionDetailView(APIView):
         )
 
     def delete(self, request, pk):
-        session = self.get_object(pk)
+        session = self.get_object(request, pk)
 
         if session is None:
             return Response(
@@ -300,8 +320,8 @@ class SendSessionMessageView(APIView):
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            
-            
+
+
 class StreamAIView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -341,7 +361,8 @@ class StreamAIView(APIView):
             generator,
             content_type="text/plain",
         )
-        
+
+
 class BuildKnowledgeBaseView(APIView):
     def post(self, request):
         try:
@@ -413,20 +434,27 @@ Answer:
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            
-            
+
+
 class KnowledgeDocumentListCreateView(APIView):
     def get(self, request):
-        documents = KnowledgeDocument.objects.filter(user=request.user)
-        serializer = KnowledgeDocumentSerializer(documents, many=True)
+        search = request.query_params.get("search", "")
 
-        return Response(
+        documents = KnowledgeDocument.objects.filter(user=request.user)
+
+        if search:
+            documents = documents.filter(title__icontains=search)
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(documents, request)
+
+        serializer = KnowledgeDocumentSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
             {
                 "success": True,
-                "count": documents.count(),
                 "results": serializer.data,
-            },
-            status=status.HTTP_200_OK,
+            }
         )
 
     def post(self, request):
@@ -485,8 +513,8 @@ class KnowledgeDocumentDetailView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-        
-        
+
+
 class SendSessionRAGMessageView(APIView):
     def post(self, request, pk):
         try:
@@ -568,12 +596,9 @@ class SendSessionRAGMessageView(APIView):
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            
-            
-class StreamSessionRAGMessageView(APIView):
-    authentication_classes = []
-    permission_classes = []
 
+
+class StreamSessionRAGMessageView(APIView):
     def get(self, request, pk):
         return Response(
             {
@@ -614,6 +639,7 @@ class StreamSessionRAGMessageView(APIView):
         try:
             rag_context = search_knowledge(
                 query=user_message,
+                user=request.user,
                 top_k=top_k,
             )
 
