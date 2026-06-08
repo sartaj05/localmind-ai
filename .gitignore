@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Django
+*.log
+db.sqlite3
+media/
+staticfiles/
+
+# Environment
+.env
+
+# Migrations - do not push migration files
+*/migrations/*.py
+!*/migrations/__init__.py
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI / Vector DB / Model Cache
+chroma_db/
+knowledge_base/uploads/
+models/
+*.bin
+*.gguf
+*.safetensors
