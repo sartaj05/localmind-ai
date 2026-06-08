@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
+    "drf_spectacular",
     "rest_framework",
     "rest_framework_simplejwt",
     "accounts",
@@ -87,6 +88,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -150,3 +152,10 @@ DEFAULT_AI_MODEL = os.getenv("DEFAULT_AI_MODEL", "phi3")
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "LocalMind AI API",
+    "DESCRIPTION": "Django local AI assistant with Ollama, chat sessions, streaming, RAG, and JWT authentication.",
+    "VERSION": "1.0.0",
+}
