@@ -15,6 +15,7 @@ from .views import (
     StreamSessionRAGMessageView,
     LocalModelListView,
     AIHealthCheckView,
+    AIUsageLogListView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -47,4 +48,5 @@ urlpatterns = [
     ),
     path("models/", LocalModelListView.as_view(), name="local-model-list"),
     path("health/", AIHealthCheckView.as_view(), name="ai-health-check"),
+    path("usage-logs/", AIUsageLogListView.as_view(), name="ai-usage-logs"),
 ]

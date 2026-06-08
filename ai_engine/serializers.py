@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from .models import (
     AIChatHistory,
+    AIUsageLog,
     ChatSession,
     ChatMessage,
     KnowledgeDocument,
@@ -104,3 +105,17 @@ class SendSessionRAGMessageSerializer(serializers.Serializer):
     message = serializers.CharField(required=True, allow_blank=False)
     model = serializers.CharField(required=False, allow_blank=True)
     top_k = serializers.IntegerField(required=False, min_value=1, max_value=10)
+    
+class AIUsageLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIUsageLog
+        fields = [
+            "id",
+            "endpoint",
+            "model_name",
+            "prompt",
+            "success",
+            "error_message",
+            "response_time_ms",
+            "created_at",
+        ]

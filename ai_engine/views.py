@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.http import StreamingHttpResponse
-
+from .models import AIUsageLog
+from .serializers import AIUsageLogSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -737,4 +738,21 @@ class AIHealthCheckView(APIView):
                 "default_model": settings.DEFAULT_AI_MODEL,
             },
             status=status.HTTP_200_OK,
+        )
+        
+        
+class AIUsageLogListView(APIView):
+    def get(self, request):
+        logs = AIUsageLog.objects.filter(user=request.user)
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(logs, request)
+
+        serializer = AIUsageLogSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
+            {
+                "success": True,
+                "results": serializer.data,
+            }
         )

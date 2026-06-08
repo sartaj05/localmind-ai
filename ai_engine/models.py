@@ -81,3 +81,23 @@ class KnowledgeDocument(models.Model):
 
     def __str__(self):
         return self.title
+    
+class AIUsageLog(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ai_usage_logs",
+    )
+    endpoint = models.CharField(max_length=255)
+    model_name = models.CharField(max_length=100, blank=True)
+    prompt = models.TextField(blank=True)
+    success = models.BooleanField(default=True)
+    error_message = models.TextField(blank=True)
+    response_time_ms = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user} - {self.endpoint} - {self.success}"
