@@ -563,3 +563,97 @@ class SendSessionRAGMessageView(APIView):
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+            
+class StreamSessionRAGMessageView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, pk):
+        return Response(
+            {
+                "success": True,
+                "message": "This endpoint supports POST streaming only.",
+                "method": "POST",
+                "url": f"/api/ai/sessions/{pk}/rag-stream/",
+                "example_body": {
+                    "message": "What is this document about?",
+                    "model": "phi3",
+                    "top_k": 3,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request, pk):
+        try:
+            session = ChatSession.objects.get(pk=pk)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = SendSessionRAGMessageSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_message = serializer.validated_data["message"]
+        model = serializer.validated_data.get("model") or session.model_name
+        top_k = serializer.validated_data.get("top_k") or 3
+
+        try:
+            rag_context = search_knowledge(
+                query=user_message,
+                top_k=top_k,
+            )
+
+            context_prompt = build_rag_context_prompt(
+                messages=session.messages,
+                new_message=user_message,
+                rag_context=rag_context,
+            )
+
+            ChatMessage.objects.create(
+                session=session,
+                role="user",
+                content=user_message,
+            )
+
+            def response_generator():
+                full_answer = ""
+
+                for token in stream_ollama_response(
+                    prompt=context_prompt,
+                    model=model,
+                ):
+                    full_answer += token
+                    yield token
+
+                ChatMessage.objects.create(
+                    session=session,
+                    role="assistant",
+                    content=full_answer,
+                )
+
+                session.model_name = model
+
+                if session.title == "New Chat":
+                    session.title = user_message[:50]
+
+                session.save(update_fields=["model_name", "title", "updated_at"])
+
+            return StreamingHttpResponse(
+                response_generator(),
+                content_type="text/plain",
+            )
+
+        except Exception as error:
+            return Response(
+                {"success": False, "error": str(error)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

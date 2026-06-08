@@ -21,13 +21,16 @@ def stream_ollama_response(prompt, model=None):
         timeout=300,
     )
 
-    for line in response.iter_lines():
+    if response.status_code != 200:
+        yield f"\n[ERROR] Ollama API error: {response.text}"
+        return
 
+    for line in response.iter_lines():
         if not line:
             continue
 
-        data = json.loads(line)
-
+        data = json.loads(line.decode("utf-8"))
         token = data.get("response", "")
 
-        yield token
+        if token:
+            yield token
