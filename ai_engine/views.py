@@ -36,11 +36,11 @@ class AskAIView(APIView):
             answer = ask_local_model(prompt=prompt, model=model)
 
             chat = AIChatHistory.objects.create(
+                user=request.user,
                 model_name=model,
                 prompt=prompt,
                 response=answer,
             )
-
             return Response(
                 {
                     "success": True,
@@ -61,7 +61,7 @@ class AskAIView(APIView):
 
 class AIChatHistoryListView(APIView):
     def get(self, request):
-        chats = AIChatHistory.objects.all()
+        chats = AIChatHistory.objects.filter(user=request.user)
         serializer = AIChatHistorySerializer(chats, many=True)
 
         return Response(
@@ -116,7 +116,7 @@ class AIChatHistoryDetailView(APIView):
 
 class ChatSessionListCreateView(APIView):
     def get(self, request):
-        sessions = ChatSession.objects.all()
+        sessions = ChatSession.objects.filter(user=request.user)
         serializer = ChatSessionSerializer(sessions, many=True)
 
         return Response(
@@ -141,10 +141,10 @@ class ChatSessionListCreateView(APIView):
         model = serializer.validated_data.get("model") or settings.DEFAULT_AI_MODEL
 
         session = ChatSession.objects.create(
+            user=request.user,
             title=title,
             model_name=model,
         )
-
         response_serializer = ChatSessionSerializer(session)
 
         return Response(
@@ -160,7 +160,7 @@ class ChatSessionListCreateView(APIView):
 class ChatSessionDetailView(APIView):
     def get_object(self, pk):
         try:
-            return ChatSession.objects.get(pk=pk)
+            return ChatSession.objects.get(pk=pk, user=request.user)
         except ChatSession.DoesNotExist:
             return None
 
@@ -231,7 +231,7 @@ class ChatSessionDetailView(APIView):
 class SendSessionMessageView(APIView):
     def post(self, request, pk):
         try:
-            session = ChatSession.objects.get(pk=pk)
+            session = ChatSession.objects.get(pk=pk, user=request.user)
         except ChatSession.DoesNotExist:
             return Response(
                 {"success": False, "error": "Chat session not found"},
@@ -345,7 +345,7 @@ class StreamAIView(APIView):
 class BuildKnowledgeBaseView(APIView):
     def post(self, request):
         try:
-            total_chunks = build_knowledge_base()
+            total_chunks = build_knowledge_base(request.user)
 
             return Response(
                 {
@@ -375,7 +375,10 @@ class AskRAGView(APIView):
             )
 
         try:
-            context = search_knowledge(question)
+            context = search_knowledge(
+                query=question,
+                user=request.user,
+            )
 
             prompt = f"""
 You are a helpful AI assistant. Answer the question only using the provided context.
@@ -414,7 +417,7 @@ Answer:
             
 class KnowledgeDocumentListCreateView(APIView):
     def get(self, request):
-        documents = KnowledgeDocument.objects.all()
+        documents = KnowledgeDocument.objects.filter(user=request.user)
         serializer = KnowledgeDocumentSerializer(documents, many=True)
 
         return Response(
@@ -445,6 +448,7 @@ class KnowledgeDocumentListCreateView(APIView):
             )
 
         document = KnowledgeDocument.objects.create(
+            user=request.user,
             title=title or file.name,
             file=file,
         )
@@ -464,7 +468,7 @@ class KnowledgeDocumentListCreateView(APIView):
 class KnowledgeDocumentDetailView(APIView):
     def delete(self, request, pk):
         try:
-            document = KnowledgeDocument.objects.get(pk=pk)
+            document = KnowledgeDocument.objects.get(pk=pk, user=request.user)
         except KnowledgeDocument.DoesNotExist:
             return Response(
                 {"success": False, "error": "Document not found"},
@@ -486,7 +490,7 @@ class KnowledgeDocumentDetailView(APIView):
 class SendSessionRAGMessageView(APIView):
     def post(self, request, pk):
         try:
-            session = ChatSession.objects.get(pk=pk)
+            session = ChatSession.objects.get(pk=pk, user=request.user)
         except ChatSession.DoesNotExist:
             return Response(
                 {"success": False, "error": "Chat session not found"},
@@ -508,6 +512,7 @@ class SendSessionRAGMessageView(APIView):
         try:
             rag_context = search_knowledge(
                 query=user_message,
+                user=request.user,
                 top_k=top_k,
             )
 
@@ -587,7 +592,7 @@ class StreamSessionRAGMessageView(APIView):
 
     def post(self, request, pk):
         try:
-            session = ChatSession.objects.get(pk=pk)
+            session = ChatSession.objects.get(pk=pk, user=request.user)
         except ChatSession.DoesNotExist:
             return Response(
                 {"success": False, "error": "Chat session not found"},

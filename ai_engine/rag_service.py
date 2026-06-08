@@ -1,7 +1,7 @@
 import os
+
 import chromadb
 from pypdf import PdfReader
-from django.conf import settings
 from sentence_transformers import SentenceTransformer
 
 from .models import KnowledgeDocument
@@ -55,17 +55,17 @@ def extract_text_from_document(file_path):
     return ""
 
 
-def clear_collection():
-    existing = collection.get()
+def clear_user_collection(user):
+    existing = collection.get(where={"user_id": user.id})
 
     if existing and existing.get("ids"):
         collection.delete(ids=existing["ids"])
 
 
-def build_knowledge_base():
-    clear_collection()
+def build_knowledge_base(user):
+    clear_user_collection(user)
 
-    documents = KnowledgeDocument.objects.all()
+    documents = KnowledgeDocument.objects.filter(user=user)
     chunk_count = 0
 
     for document in documents:
@@ -82,7 +82,7 @@ def build_knowledge_base():
         chunks = chunk_text(text)
 
         for index, chunk in enumerate(chunks):
-            chunk_id = f"doc_{document.id}_chunk_{index}"
+            chunk_id = f"user_{user.id}_doc_{document.id}_chunk_{index}"
 
             embedding = embedding_model.encode(chunk).tolist()
 
@@ -92,6 +92,7 @@ def build_knowledge_base():
                 embeddings=[embedding],
                 metadatas=[
                     {
+                        "user_id": user.id,
                         "document_id": document.id,
                         "source": document.title,
                         "file_name": os.path.basename(file_path),
@@ -104,12 +105,13 @@ def build_knowledge_base():
     return chunk_count
 
 
-def search_knowledge(query, top_k=3):
+def search_knowledge(query, user, top_k=3):
     query_embedding = embedding_model.encode(query).tolist()
 
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=top_k,
+        where={"user_id": user.id},
     )
 
     documents = results.get("documents", [[]])[0]

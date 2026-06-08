@@ -1,7 +1,13 @@
 from rest_framework import serializers
-from .models import AIChatHistory, ChatSession, ChatMessage
 
-from .models import AIChatHistory, ChatSession, ChatMessage, KnowledgeDocument
+from .models import (
+    AIChatHistory,
+    ChatSession,
+    ChatMessage,
+    KnowledgeDocument,
+)
+
+
 class AskAIRequestSerializer(serializers.Serializer):
     prompt = serializers.CharField(required=True, allow_blank=False)
     model = serializers.CharField(required=False, allow_blank=True)
@@ -81,8 +87,8 @@ class RenameChatSessionSerializer(serializers.Serializer):
 class SendSessionMessageSerializer(serializers.Serializer):
     message = serializers.CharField(required=True, allow_blank=False)
     model = serializers.CharField(required=False, allow_blank=True)
-    
-    
+
+
 class KnowledgeDocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = KnowledgeDocument
@@ -92,7 +98,8 @@ class KnowledgeDocumentSerializer(serializers.ModelSerializer):
             "file",
             "uploaded_at",
         ]
-        
+
+
 class SendSessionRAGMessageSerializer(serializers.Serializer):
     message = serializers.CharField(required=True, allow_blank=False)
     model = serializers.CharField(required=False, allow_blank=True)
