@@ -47,3 +47,14 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"{self.role}: {self.content[:50]}"
+    
+class KnowledgeDocument(models.Model):
+    title = models.CharField(max_length=255)
+    file = models.FileField(upload_to="knowledge_documents/")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+
+    def __str__(self):
+        return self.title

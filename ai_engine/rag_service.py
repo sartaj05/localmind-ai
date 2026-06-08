@@ -1,10 +1,13 @@
 import os
 import chromadb
+from pypdf import PdfReader
+from django.conf import settings
 from sentence_transformers import SentenceTransformer
+
+from .models import KnowledgeDocument
 
 
 CHROMA_PATH = "chroma_db"
-KNOWLEDGE_PATH = "knowledge_base"
 
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -24,41 +27,81 @@ def chunk_text(text, chunk_size=500):
     return chunks
 
 
-def build_knowledge_base():
-    if not os.path.exists(KNOWLEDGE_PATH):
-        os.makedirs(KNOWLEDGE_PATH)
+def extract_text_from_pdf(file_path):
+    reader = PdfReader(file_path)
+    text = ""
 
+    for page in reader.pages:
+        page_text = page.extract_text() or ""
+        text += page_text + "\n"
+
+    return text
+
+
+def extract_text_from_txt(file_path):
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as file:
+        return file.read()
+
+
+def extract_text_from_document(file_path):
+    lower_path = file_path.lower()
+
+    if lower_path.endswith(".pdf"):
+        return extract_text_from_pdf(file_path)
+
+    if lower_path.endswith(".txt"):
+        return extract_text_from_txt(file_path)
+
+    return ""
+
+
+def clear_collection():
     existing = collection.get()
 
     if existing and existing.get("ids"):
         collection.delete(ids=existing["ids"])
 
-    doc_id = 1
 
-    for filename in os.listdir(KNOWLEDGE_PATH):
-        if not filename.endswith(".txt"):
+def build_knowledge_base():
+    clear_collection()
+
+    documents = KnowledgeDocument.objects.all()
+    chunk_count = 0
+
+    for document in documents:
+        file_path = document.file.path
+
+        if not os.path.exists(file_path):
             continue
 
-        file_path = os.path.join(KNOWLEDGE_PATH, filename)
+        text = extract_text_from_document(file_path)
 
-        with open(file_path, "r", encoding="utf-8") as file:
-            text = file.read()
+        if not text.strip():
+            continue
 
         chunks = chunk_text(text)
 
-        for chunk in chunks:
+        for index, chunk in enumerate(chunks):
+            chunk_id = f"doc_{document.id}_chunk_{index}"
+
             embedding = embedding_model.encode(chunk).tolist()
 
             collection.add(
-                ids=[str(doc_id)],
+                ids=[chunk_id],
                 documents=[chunk],
                 embeddings=[embedding],
-                metadatas=[{"source": filename}],
+                metadatas=[
+                    {
+                        "document_id": document.id,
+                        "source": document.title,
+                        "file_name": os.path.basename(file_path),
+                    }
+                ],
             )
 
-            doc_id += 1
+            chunk_count += 1
 
-    return doc_id - 1
+    return chunk_count
 
 
 def search_knowledge(query, top_k=3):
@@ -75,7 +118,8 @@ def search_knowledge(query, top_k=3):
     context_parts = []
 
     for index, document in enumerate(documents):
-        source = metadatas[index].get("source", "unknown")
+        metadata = metadatas[index]
+        source = metadata.get("source", "unknown")
         context_parts.append(f"Source: {source}\nContent: {document}")
 
     return "\n\n".join(context_parts)

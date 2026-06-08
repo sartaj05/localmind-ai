@@ -11,12 +11,13 @@ from .serializers import (
     ChatSessionSerializer,
     ChatSessionDetailSerializer,
     CreateChatSessionSerializer,
+    KnowledgeDocumentSerializer,
     RenameChatSessionSerializer,
     SendSessionMessageSerializer,
 )
 from .services import ask_local_model, build_context_prompt
 from .rag_service import build_knowledge_base, search_knowledge
-
+from .models import AIChatHistory, ChatSession, ChatMessage, KnowledgeDocument
 class AskAIView(APIView):
     def post(self, request):
         serializer = AskAIRequestSerializer(data=request.data)
@@ -408,3 +409,74 @@ Answer:
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+            
+class KnowledgeDocumentListCreateView(APIView):
+    def get(self, request):
+        documents = KnowledgeDocument.objects.all()
+        serializer = KnowledgeDocumentSerializer(documents, many=True)
+
+        return Response(
+            {
+                "success": True,
+                "count": documents.count(),
+                "results": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        file = request.FILES.get("file")
+        title = request.data.get("title")
+
+        if not file:
+            return Response(
+                {"success": False, "error": "File is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        allowed_extensions = [".txt", ".pdf"]
+
+        if not any(file.name.lower().endswith(ext) for ext in allowed_extensions):
+            return Response(
+                {"success": False, "error": "Only TXT and PDF files are allowed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        document = KnowledgeDocument.objects.create(
+            title=title or file.name,
+            file=file,
+        )
+
+        serializer = KnowledgeDocumentSerializer(document)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Document uploaded successfully",
+                "result": serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class KnowledgeDocumentDetailView(APIView):
+    def delete(self, request, pk):
+        try:
+            document = KnowledgeDocument.objects.get(pk=pk)
+        except KnowledgeDocument.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Document not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        document.file.delete(save=False)
+        document.delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Document deleted successfully. Rebuild knowledge base after deleting.",
+            },
+            status=status.HTTP_200_OK,
+        )
