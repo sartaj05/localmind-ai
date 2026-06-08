@@ -3,10 +3,6 @@ from django.conf import settings
 
 
 def ask_local_model(prompt: str, model: str | None = None) -> str:
-    """
-    Sends user prompt to local Ollama model and returns AI response.
-    """
-
     if not prompt:
         raise ValueError("Prompt is required")
 
@@ -27,3 +23,30 @@ def ask_local_model(prompt: str, model: str | None = None) -> str:
 
     data = response.json()
     return data.get("response", "")
+
+
+def build_context_prompt(messages, new_message: str, max_messages: int = 10) -> str:
+    recent_messages = messages.order_by("-created_at")[:max_messages]
+    recent_messages = reversed(list(recent_messages))
+
+    conversation_text = ""
+
+    for msg in recent_messages:
+        if msg.role == "user":
+            conversation_text += f"User: {msg.content}\n"
+        else:
+            conversation_text += f"Assistant: {msg.content}\n"
+
+    final_prompt = f"""
+You are a helpful AI assistant. Continue the conversation using the previous chat context.
+
+Previous conversation:
+{conversation_text}
+
+New user message:
+User: {new_message}
+
+Assistant:
+"""
+
+    return final_prompt
