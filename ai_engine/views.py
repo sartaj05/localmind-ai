@@ -4,7 +4,7 @@ from django.http import StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-
+from django.db.models import Avg
 from .models import (
     AIChatHistory,
     ChatSession,
@@ -816,4 +816,36 @@ class AIUsageLogListView(APIView):
 
         return paginator.get_paginated_response(
             {"success": True, "results": serializer.data}
+        )
+        
+class AIDashboardSummaryView(APIView):
+    def get(self, request):
+        total_sessions = ChatSession.objects.filter(user=request.user).count()
+        total_documents = KnowledgeDocument.objects.filter(user=request.user).count()
+        total_history = AIChatHistory.objects.filter(user=request.user).count()
+
+        logs = AIUsageLog.objects.filter(user=request.user)
+
+        total_requests = logs.count()
+        successful_requests = logs.filter(success=True).count()
+        failed_requests = logs.filter(success=False).count()
+
+        avg_response_time = logs.aggregate(
+            avg_time=Avg("response_time_ms")
+        )["avg_time"]
+
+        return Response(
+            {
+                "success": True,
+                "summary": {
+                    "total_sessions": total_sessions,
+                    "total_documents": total_documents,
+                    "total_history": total_history,
+                    "total_ai_requests": total_requests,
+                    "successful_requests": successful_requests,
+                    "failed_requests": failed_requests,
+                    "average_response_time_ms": round(avg_response_time or 0, 2),
+                },
+            },
+            status=status.HTTP_200_OK,
         )
