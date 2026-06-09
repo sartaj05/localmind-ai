@@ -867,3 +867,19 @@ class AIRecentActivityView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+        
+class ClearAIChatHistoryView(APIView):
+    def delete(self, request):
+        chats = AIChatHistory.objects.filter(user=request.user)
+        deleted_count = chats.count()
+        chats.delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "AI chat history cleared successfully",
+                "deleted_history": deleted_count,
+            },
+            status=status.HTTP_200_OK,
+        )

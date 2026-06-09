@@ -18,6 +18,7 @@ from .views import (
     AIUsageLogListView,
     AIDashboardSummaryView,
     AIRecentActivityView,
+    ClearAIChatHistoryView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -53,4 +54,9 @@ urlpatterns = [
     path("usage-logs/", AIUsageLogListView.as_view(), name="ai-usage-logs"),
     path("dashboard/summary/", AIDashboardSummaryView.as_view(), name="ai-dashboard-summary"),
     path("dashboard/recent-activity/", AIRecentActivityView.as_view(), name="ai-recent-activity"),
+    path(
+        "history/clear/",
+        ClearAIChatHistoryView.as_view(),
+        name="clear-ai-chat-history",
+    ),
 ]
