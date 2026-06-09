@@ -1,18 +1,17 @@
 from django.conf import settings
 from django.http import StreamingHttpResponse
-from .models import AIUsageLog
-from .serializers import AIUsageLogSerializer
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .services import (
-    ask_local_model,
-    build_context_prompt,
-    build_rag_context_prompt,
-    list_local_models,
-    check_ollama_health,
+
+from .models import (
+    AIChatHistory,
+    ChatSession,
+    ChatMessage,
+    KnowledgeDocument,
+    AIUsageLog,
 )
-from .models import AIChatHistory, ChatSession, ChatMessage, KnowledgeDocument
 from .serializers import (
     AskAIRequestSerializer,
     AIChatHistorySerializer,
@@ -23,15 +22,24 @@ from .serializers import (
     RenameChatSessionSerializer,
     SendSessionMessageSerializer,
     SendSessionRAGMessageSerializer,
+    AIUsageLogSerializer,
 )
 from .pagination import StandardResultsSetPagination
-from .services import ask_local_model, build_context_prompt, build_rag_context_prompt
+from .services import (
+    ask_local_model,
+    build_context_prompt,
+    build_rag_context_prompt,
+    list_local_models,
+    check_ollama_health,
+)
 from .rag_service import build_knowledge_base, search_knowledge
 from .streaming import stream_ollama_response
+from .logging_service import create_usage_log, now_ms
 
 
 class AskAIView(APIView):
     def post(self, request):
+        started_at = now_ms()
         serializer = AskAIRequestSerializer(data=request.data)
 
         if not serializer.is_valid():
@@ -53,6 +61,15 @@ class AskAIView(APIView):
                 response=answer,
             )
 
+            create_usage_log(
+                user=request.user,
+                endpoint="/api/ai/ask/",
+                model_name=model,
+                prompt=prompt,
+                success=True,
+                started_at_ms=started_at,
+            )
+
             return Response(
                 {
                     "success": True,
@@ -65,6 +82,16 @@ class AskAIView(APIView):
             )
 
         except Exception as error:
+            create_usage_log(
+                user=request.user,
+                endpoint="/api/ai/ask/",
+                model_name=model,
+                prompt=prompt,
+                success=False,
+                error_message=str(error),
+                started_at_ms=started_at,
+            )
+
             return Response(
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -74,7 +101,6 @@ class AskAIView(APIView):
 class AIChatHistoryListView(APIView):
     def get(self, request):
         search = request.query_params.get("search", "")
-
         chats = AIChatHistory.objects.filter(user=request.user)
 
         if search:
@@ -82,14 +108,10 @@ class AIChatHistoryListView(APIView):
 
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(chats, request)
-
         serializer = AIChatHistorySerializer(page, many=True)
 
         return paginator.get_paginated_response(
-            {
-                "success": True,
-                "results": serializer.data,
-            }
+            {"success": True, "results": serializer.data}
         )
 
 
@@ -110,11 +132,7 @@ class AIChatHistoryDetailView(APIView):
             )
 
         serializer = AIChatHistorySerializer(chat)
-
-        return Response(
-            {"success": True, "result": serializer.data},
-            status=status.HTTP_200_OK,
-        )
+        return Response({"success": True, "result": serializer.data})
 
     def delete(self, request, pk):
         chat = self.get_object(request, pk)
@@ -126,17 +144,12 @@ class AIChatHistoryDetailView(APIView):
             )
 
         chat.delete()
-
-        return Response(
-            {"success": True, "message": "Chat history deleted successfully"},
-            status=status.HTTP_200_OK,
-        )
+        return Response({"success": True, "message": "Chat history deleted successfully"})
 
 
 class ChatSessionListCreateView(APIView):
     def get(self, request):
         search = request.query_params.get("search", "")
-
         sessions = ChatSession.objects.filter(user=request.user)
 
         if search:
@@ -144,14 +157,10 @@ class ChatSessionListCreateView(APIView):
 
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(sessions, request)
-
         serializer = ChatSessionSerializer(page, many=True)
 
         return paginator.get_paginated_response(
-            {
-                "success": True,
-                "results": serializer.data,
-            }
+            {"success": True, "results": serializer.data}
         )
 
     def post(self, request):
@@ -172,13 +181,11 @@ class ChatSessionListCreateView(APIView):
             model_name=model,
         )
 
-        response_serializer = ChatSessionSerializer(session)
-
         return Response(
             {
                 "success": True,
                 "message": "Chat session created successfully",
-                "result": response_serializer.data,
+                "result": ChatSessionSerializer(session).data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -200,11 +207,8 @@ class ChatSessionDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = ChatSessionDetailSerializer(session)
-
         return Response(
-            {"success": True, "result": serializer.data},
-            status=status.HTTP_200_OK,
+            {"success": True, "result": ChatSessionDetailSerializer(session).data}
         )
 
     def patch(self, request, pk):
@@ -227,15 +231,12 @@ class ChatSessionDetailView(APIView):
         session.title = serializer.validated_data["title"]
         session.save(update_fields=["title", "updated_at"])
 
-        response_serializer = ChatSessionSerializer(session)
-
         return Response(
             {
                 "success": True,
                 "message": "Chat session renamed successfully",
-                "result": response_serializer.data,
-            },
-            status=status.HTTP_200_OK,
+                "result": ChatSessionSerializer(session).data,
+            }
         )
 
     def delete(self, request, pk):
@@ -248,15 +249,13 @@ class ChatSessionDetailView(APIView):
             )
 
         session.delete()
-
-        return Response(
-            {"success": True, "message": "Chat session deleted successfully"},
-            status=status.HTTP_200_OK,
-        )
+        return Response({"success": True, "message": "Chat session deleted successfully"})
 
 
 class SendSessionMessageView(APIView):
     def post(self, request, pk):
+        started_at = now_ms()
+
         try:
             session = ChatSession.objects.get(pk=pk, user=request.user)
         except ChatSession.DoesNotExist:
@@ -282,10 +281,7 @@ class SendSessionMessageView(APIView):
                 new_message=user_message,
             )
 
-            ai_answer = ask_local_model(
-                prompt=context_prompt,
-                model=model,
-            )
+            ai_answer = ask_local_model(prompt=context_prompt, model=model)
 
             ChatMessage.objects.create(
                 session=session,
@@ -306,6 +302,15 @@ class SendSessionMessageView(APIView):
 
             session.save(update_fields=["model_name", "title", "updated_at"])
 
+            create_usage_log(
+                user=request.user,
+                endpoint=f"/api/ai/sessions/{pk}/messages/",
+                model_name=model,
+                prompt=user_message,
+                success=True,
+                started_at_ms=started_at,
+            )
+
             return Response(
                 {
                     "success": True,
@@ -318,11 +323,20 @@ class SendSessionMessageView(APIView):
                         "content": assistant_message.content,
                         "created_at": assistant_message.created_at,
                     },
-                },
-                status=status.HTTP_200_OK,
+                }
             )
 
         except Exception as error:
+            create_usage_log(
+                user=request.user,
+                endpoint=f"/api/ai/sessions/{pk}/messages/",
+                model_name=model,
+                prompt=user_message,
+                success=False,
+                error_message=str(error),
+                started_at_ms=started_at,
+            )
+
             return Response(
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -344,8 +358,7 @@ class StreamAIView(APIView):
                     "prompt": "Explain Django ORM in simple words",
                     "model": "phi3",
                 },
-            },
-            status=status.HTTP_200_OK,
+            }
         )
 
     def post(self, request):
@@ -357,17 +370,11 @@ class StreamAIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        model = request.data.get("model")
+        model = request.data.get("model") or settings.DEFAULT_AI_MODEL
 
-        generator = stream_ollama_response(
-            prompt=prompt,
-            model=model,
-        )
+        generator = stream_ollama_response(prompt=prompt, model=model)
 
-        return StreamingHttpResponse(
-            generator,
-            content_type="text/plain",
-        )
+        return StreamingHttpResponse(generator, content_type="text/plain")
 
 
 class BuildKnowledgeBaseView(APIView):
@@ -380,8 +387,7 @@ class BuildKnowledgeBaseView(APIView):
                     "success": True,
                     "message": "Knowledge base built successfully",
                     "total_chunks": total_chunks,
-                },
-                status=status.HTTP_200_OK,
+                }
             )
 
         except Exception as error:
@@ -393,6 +399,8 @@ class BuildKnowledgeBaseView(APIView):
 
 class AskRAGView(APIView):
     def post(self, request):
+        started_at = now_ms()
+
         question = request.data.get("question")
         model = request.data.get("model") or settings.DEFAULT_AI_MODEL
 
@@ -403,10 +411,7 @@ class AskRAGView(APIView):
             )
 
         try:
-            context = search_knowledge(
-                query=question,
-                user=request.user,
-            )
+            context = search_knowledge(query=question, user=request.user)
 
             prompt = f"""
 You are a helpful AI assistant. Answer the question only using the provided context.
@@ -425,6 +430,15 @@ Answer:
 
             answer = ask_local_model(prompt=prompt, model=model)
 
+            create_usage_log(
+                user=request.user,
+                endpoint="/api/ai/rag/ask/",
+                model_name=model,
+                prompt=question,
+                success=True,
+                started_at_ms=started_at,
+            )
+
             return Response(
                 {
                     "success": True,
@@ -432,11 +446,20 @@ Answer:
                     "model": model,
                     "context": context,
                     "answer": answer,
-                },
-                status=status.HTTP_200_OK,
+                }
             )
 
         except Exception as error:
+            create_usage_log(
+                user=request.user,
+                endpoint="/api/ai/rag/ask/",
+                model_name=model,
+                prompt=question,
+                success=False,
+                error_message=str(error),
+                started_at_ms=started_at,
+            )
+
             return Response(
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -446,7 +469,6 @@ Answer:
 class KnowledgeDocumentListCreateView(APIView):
     def get(self, request):
         search = request.query_params.get("search", "")
-
         documents = KnowledgeDocument.objects.filter(user=request.user)
 
         if search:
@@ -454,14 +476,10 @@ class KnowledgeDocumentListCreateView(APIView):
 
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(documents, request)
-
         serializer = KnowledgeDocumentSerializer(page, many=True)
 
         return paginator.get_paginated_response(
-            {
-                "success": True,
-                "results": serializer.data,
-            }
+            {"success": True, "results": serializer.data}
         )
 
     def post(self, request):
@@ -488,13 +506,11 @@ class KnowledgeDocumentListCreateView(APIView):
             file=file,
         )
 
-        serializer = KnowledgeDocumentSerializer(document)
-
         return Response(
             {
                 "success": True,
                 "message": "Document uploaded successfully",
-                "result": serializer.data,
+                "result": KnowledgeDocumentSerializer(document).data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -517,13 +533,14 @@ class KnowledgeDocumentDetailView(APIView):
             {
                 "success": True,
                 "message": "Document deleted successfully. Rebuild knowledge base after deleting.",
-            },
-            status=status.HTTP_200_OK,
+            }
         )
 
 
 class SendSessionRAGMessageView(APIView):
     def post(self, request, pk):
+        started_at = now_ms()
+
         try:
             session = ChatSession.objects.get(pk=pk, user=request.user)
         except ChatSession.DoesNotExist:
@@ -557,10 +574,7 @@ class SendSessionRAGMessageView(APIView):
                 rag_context=rag_context,
             )
 
-            ai_answer = ask_local_model(
-                prompt=context_prompt,
-                model=model,
-            )
+            ai_answer = ask_local_model(prompt=context_prompt, model=model)
 
             ChatMessage.objects.create(
                 session=session,
@@ -581,6 +595,15 @@ class SendSessionRAGMessageView(APIView):
 
             session.save(update_fields=["model_name", "title", "updated_at"])
 
+            create_usage_log(
+                user=request.user,
+                endpoint=f"/api/ai/sessions/{pk}/rag-message/",
+                model_name=model,
+                prompt=user_message,
+                success=True,
+                started_at_ms=started_at,
+            )
+
             return Response(
                 {
                     "success": True,
@@ -594,11 +617,20 @@ class SendSessionRAGMessageView(APIView):
                         "content": assistant_message.content,
                         "created_at": assistant_message.created_at,
                     },
-                },
-                status=status.HTTP_200_OK,
+                }
             )
 
         except Exception as error:
+            create_usage_log(
+                user=request.user,
+                endpoint=f"/api/ai/sessions/{pk}/rag-message/",
+                model_name=model,
+                prompt=user_message,
+                success=False,
+                error_message=str(error),
+                started_at_ms=started_at,
+            )
+
             return Response(
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -618,11 +650,12 @@ class StreamSessionRAGMessageView(APIView):
                     "model": "phi3",
                     "top_k": 3,
                 },
-            },
-            status=status.HTTP_200_OK,
+            }
         )
 
     def post(self, request, pk):
+        started_at = now_ms()
+
         try:
             session = ChatSession.objects.get(pk=pk, user=request.user)
         except ChatSession.DoesNotExist:
@@ -665,25 +698,47 @@ class StreamSessionRAGMessageView(APIView):
             def response_generator():
                 full_answer = ""
 
-                for token in stream_ollama_response(
-                    prompt=context_prompt,
-                    model=model,
-                ):
-                    full_answer += token
-                    yield token
+                try:
+                    for token in stream_ollama_response(
+                        prompt=context_prompt,
+                        model=model,
+                    ):
+                        full_answer += token
+                        yield token
 
-                ChatMessage.objects.create(
-                    session=session,
-                    role="assistant",
-                    content=full_answer,
-                )
+                    ChatMessage.objects.create(
+                        session=session,
+                        role="assistant",
+                        content=full_answer,
+                    )
 
-                session.model_name = model
+                    session.model_name = model
 
-                if session.title == "New Chat":
-                    session.title = user_message[:50]
+                    if session.title == "New Chat":
+                        session.title = user_message[:50]
 
-                session.save(update_fields=["model_name", "title", "updated_at"])
+                    session.save(update_fields=["model_name", "title", "updated_at"])
+
+                    create_usage_log(
+                        user=request.user,
+                        endpoint=f"/api/ai/sessions/{pk}/rag-stream/",
+                        model_name=model,
+                        prompt=user_message,
+                        success=True,
+                        started_at_ms=started_at,
+                    )
+
+                except Exception as error:
+                    create_usage_log(
+                        user=request.user,
+                        endpoint=f"/api/ai/sessions/{pk}/rag-stream/",
+                        model_name=model,
+                        prompt=user_message,
+                        success=False,
+                        error_message=str(error),
+                        started_at_ms=started_at,
+                    )
+                    yield f"\n[ERROR] {str(error)}"
 
             return StreamingHttpResponse(
                 response_generator(),
@@ -691,12 +746,22 @@ class StreamSessionRAGMessageView(APIView):
             )
 
         except Exception as error:
+            create_usage_log(
+                user=request.user,
+                endpoint=f"/api/ai/sessions/{pk}/rag-stream/",
+                model_name=model,
+                prompt=user_message,
+                success=False,
+                error_message=str(error),
+                started_at_ms=started_at,
+            )
+
             return Response(
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            
-            
+
+
 class LocalModelListView(APIView):
     def get(self, request):
         try:
@@ -708,19 +773,16 @@ class LocalModelListView(APIView):
                     "default_model": settings.DEFAULT_AI_MODEL,
                     "count": len(models),
                     "results": models,
-                },
-                status=status.HTTP_200_OK,
+                }
             )
 
         except Exception as error:
             return Response(
-                {
-                    "success": False,
-                    "error": str(error),
-                },
+                {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            
+
+
 class AIHealthCheckView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -731,19 +793,21 @@ class AIHealthCheckView(APIView):
         return Response(
             {
                 "success": True,
-                "django": {
-                    "available": True,
-                },
+                "django": {"available": True},
                 "ollama": ollama,
                 "default_model": settings.DEFAULT_AI_MODEL,
-            },
-            status=status.HTTP_200_OK,
+            }
         )
-        
-        
+
+
 class AIUsageLogListView(APIView):
     def get(self, request):
+        search = request.query_params.get("search", "")
+
         logs = AIUsageLog.objects.filter(user=request.user)
+
+        if search:
+            logs = logs.filter(prompt__icontains=search)
 
         paginator = StandardResultsSetPagination()
         page = paginator.paginate_queryset(logs, request)
@@ -751,8 +815,5 @@ class AIUsageLogListView(APIView):
         serializer = AIUsageLogSerializer(page, many=True)
 
         return paginator.get_paginated_response(
-            {
-                "success": True,
-                "results": serializer.data,
-            }
+            {"success": True, "results": serializer.data}
         )
