@@ -17,6 +17,7 @@ from .views import (
     AIHealthCheckView,
     AIUsageLogListView,
     AIDashboardSummaryView,
+    AIRecentActivityView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -51,4 +52,5 @@ urlpatterns = [
     path("health/", AIHealthCheckView.as_view(), name="ai-health-check"),
     path("usage-logs/", AIUsageLogListView.as_view(), name="ai-usage-logs"),
     path("dashboard/summary/", AIDashboardSummaryView.as_view(), name="ai-dashboard-summary"),
+    path("dashboard/recent-activity/", AIRecentActivityView.as_view(), name="ai-recent-activity"),
 ]

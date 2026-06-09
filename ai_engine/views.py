@@ -849,3 +849,21 @@ class AIDashboardSummaryView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class AIRecentActivityView(APIView):
+    def get(self, request):
+        recent_sessions = ChatSession.objects.filter(user=request.user)[:5]
+        recent_documents = KnowledgeDocument.objects.filter(user=request.user)[:5]
+        recent_logs = AIUsageLog.objects.filter(user=request.user)[:5]
+
+        return Response(
+            {
+                "success": True,
+                "recent_activity": {
+                    "sessions": ChatSessionSerializer(recent_sessions, many=True).data,
+                    "documents": KnowledgeDocumentSerializer(recent_documents, many=True).data,
+                    "usage_logs": AIUsageLogSerializer(recent_logs, many=True).data,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
