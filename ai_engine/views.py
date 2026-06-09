@@ -507,10 +507,13 @@ class KnowledgeDocumentListCreateView(APIView):
             file=file,
         )
 
+        total_chunks = build_knowledge_base(request.user)
+
         return Response(
             {
                 "success": True,
-                "message": "Document uploaded successfully",
+                "message": "Document uploaded successfully and knowledge base rebuilt.",
+                "total_chunks": total_chunks,
                 "result": KnowledgeDocumentSerializer(document).data,
             },
             status=status.HTTP_201_CREATED,
@@ -554,10 +557,13 @@ class KnowledgeDocumentDetailView(APIView):
 
         document.save()
 
+        total_chunks = build_knowledge_base(request.user)
+
         return Response(
             {
                 "success": True,
-                "message": "Document updated successfully. Rebuild knowledge base after updating.",
+                "message": "Document updated successfully and knowledge base rebuilt.",
+                "total_chunks": total_chunks,
                 "result": KnowledgeDocumentSerializer(document).data,
             },
             status=status.HTTP_200_OK,
@@ -575,10 +581,13 @@ class KnowledgeDocumentDetailView(APIView):
         document.file.delete(save=False)
         document.delete()
 
+        total_chunks = build_knowledge_base(request.user)
+
         return Response(
             {
                 "success": True,
-                "message": "Document deleted successfully. Rebuild knowledge base after deleting.",
+                "message": "Document deleted successfully and knowledge base rebuilt.",
+                "total_chunks": total_chunks,
             },
             status=status.HTTP_200_OK,
         )
@@ -939,15 +948,17 @@ class ClearKnowledgeDocumentsView(APIView):
 
         documents.delete()
 
+        total_chunks = build_knowledge_base(request.user)
+
         return Response(
             {
                 "success": True,
-                "message": "All knowledge documents deleted successfully. Rebuild knowledge base after deleting.",
+                "message": "All knowledge documents deleted successfully and knowledge base rebuilt.",
                 "deleted_documents": deleted_count,
+                "total_chunks": total_chunks,
             },
             status=status.HTTP_200_OK,
         )
-        
 class ClearAIUsageLogsView(APIView):
     def delete(self, request):
         logs = AIUsageLog.objects.filter(user=request.user)
