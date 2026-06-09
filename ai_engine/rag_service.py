@@ -161,3 +161,44 @@ def get_user_collection_stats(user):
         "total_chunks": len(ids),
         "is_indexed": len(ids) > 0,
     }
+def search_knowledge_with_sources(query, user, top_k=3):
+    model = get_embedding_model()
+
+    query_embedding = model.encode(query).tolist()
+
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k,
+        where={"user_id": user.id},
+    )
+
+    documents = results.get("documents", [[]])[0]
+    metadatas = results.get("metadatas", [[]])[0]
+
+    context_parts = []
+    sources = []
+
+    for index, document in enumerate(documents):
+        metadata = metadatas[index]
+
+        source = metadata.get("source", "unknown")
+        document_id = metadata.get("document_id")
+        file_name = metadata.get("file_name", "unknown")
+
+        context_parts.append(
+            f"Source: {source}\nContent: {document}"
+        )
+
+        sources.append(
+            {
+                "document_id": document_id,
+                "source": source,
+                "file_name": file_name,
+                "chunk_preview": document[:200],
+            }
+        )
+
+    return {
+        "context": "\n\n".join(context_parts),
+        "sources": sources,
+    }

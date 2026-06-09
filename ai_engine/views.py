@@ -12,6 +12,12 @@ from .models import (
     KnowledgeDocument,
     AIUsageLog,
 )
+from .rag_service import (
+    build_knowledge_base,
+    search_knowledge,
+    get_user_collection_stats,
+    search_knowledge_with_sources,
+)
 from .serializers import (
     AskAIRequestSerializer,
     AIChatHistorySerializer,
@@ -436,7 +442,13 @@ class AskRAGView(APIView):
             )
 
         try:
-            context = search_knowledge(query=question, user=request.user)
+            retrieval = search_knowledge_with_sources(
+                query=question,
+                user=request.user,
+            )
+
+            context = retrieval["context"]
+            sources = retrieval["sources"]
 
             prompt = f"""
 You are a helpful AI assistant. Answer the question only using the provided context.
@@ -470,8 +482,10 @@ Answer:
                     "question": question,
                     "model": model,
                     "context": context,
+                    "sources": sources,
                     "answer": answer,
-                }
+                },
+                status=status.HTTP_200_OK,
             )
 
         except Exception as error:
@@ -489,8 +503,6 @@ Answer:
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
 class KnowledgeDocumentListCreateView(APIView):
     def get(self, request):
         search = request.query_params.get("search", "")
@@ -640,11 +652,14 @@ class SendSessionRAGMessageView(APIView):
         top_k = serializer.validated_data.get("top_k") or 3
 
         try:
-            rag_context = search_knowledge(
+            retrieval = search_knowledge_with_sources(
                 query=user_message,
                 user=request.user,
                 top_k=top_k,
             )
+
+            rag_context = retrieval["context"]
+            sources = retrieval["sources"]
 
             context_prompt = build_rag_context_prompt(
                 messages=session.messages,
@@ -672,7 +687,8 @@ class SendSessionRAGMessageView(APIView):
                 session.title = generate_chat_title(
                     user_message=user_message,
                     model=model,
-    )
+                )
+
             session.save(update_fields=["model_name", "title", "updated_at"])
 
             create_usage_log(
@@ -690,6 +706,7 @@ class SendSessionRAGMessageView(APIView):
                     "session_id": session.id,
                     "model": model,
                     "rag_context": rag_context,
+                    "sources": sources,
                     "user_message": user_message,
                     "assistant_message": {
                         "id": assistant_message.id,
@@ -697,7 +714,8 @@ class SendSessionRAGMessageView(APIView):
                         "content": assistant_message.content,
                         "created_at": assistant_message.created_at,
                     },
-                }
+                },
+                status=status.HTTP_200_OK,
             )
 
         except Exception as error:
@@ -716,7 +734,6 @@ class SendSessionRAGMessageView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-
 class StreamSessionRAGMessageView(APIView):
     def get(self, request, pk):
         return Response(
@@ -730,7 +747,8 @@ class StreamSessionRAGMessageView(APIView):
                     "model": "phi3",
                     "top_k": 3,
                 },
-            }
+            },
+            status=status.HTTP_200_OK,
         )
 
     def post(self, request, pk):
@@ -757,11 +775,14 @@ class StreamSessionRAGMessageView(APIView):
         top_k = serializer.validated_data.get("top_k") or 3
 
         try:
-            rag_context = search_knowledge(
+            retrieval = search_knowledge_with_sources(
                 query=user_message,
                 user=request.user,
                 top_k=top_k,
             )
+
+            rag_context = retrieval["context"]
+            sources = retrieval["sources"]
 
             context_prompt = build_rag_context_prompt(
                 messages=session.messages,
@@ -779,6 +800,13 @@ class StreamSessionRAGMessageView(APIView):
                 full_answer = ""
 
                 try:
+                    yield "Sources used:\n"
+
+                    for source in sources:
+                        yield f"- {source['source']} ({source['file_name']})\n"
+
+                    yield "\nAnswer:\n"
+
                     for token in stream_ollama_response(
                         prompt=context_prompt,
                         model=model,
@@ -843,7 +871,6 @@ class StreamSessionRAGMessageView(APIView):
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 
 class LocalModelListView(APIView):
     def get(self, request):
@@ -1186,11 +1213,14 @@ class RegenerateRAGChatMessageView(APIView):
         top_k = request.data.get("top_k") or 3
 
         try:
-            rag_context = search_knowledge(
+            retrieval = search_knowledge_with_sources(
                 query=user_message.content,
                 user=request.user,
                 top_k=top_k,
             )
+
+            rag_context = retrieval["context"]
+            sources = retrieval["sources"]
 
             context_prompt = build_rag_context_prompt(
                 messages=session.messages.filter(created_at__lt=user_message.created_at),
@@ -1226,6 +1256,7 @@ class RegenerateRAGChatMessageView(APIView):
                     "success": True,
                     "message": "RAG AI answer regenerated successfully",
                     "rag_context": rag_context,
+                    "sources": sources,
                     "assistant_message": {
                         "id": assistant_message.id,
                         "role": assistant_message.role,
