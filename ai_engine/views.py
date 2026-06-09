@@ -21,6 +21,7 @@ from .rag_service import (
 from .serializers import (
     AskAIRequestSerializer,
     AIChatHistorySerializer,
+    BulkSessionIdsSerializer,
     ChatMessageSerializer,
     ChatSessionSerializer,
     ChatSessionDetailSerializer,
@@ -1881,6 +1882,40 @@ class ChatSessionPreviewView(APIView):
                     "first_message": ChatMessageSerializer(first_message).data if first_message else None,
                     "last_message": ChatMessageSerializer(last_message).data if last_message else None,
                 },
+            },
+            status=status.HTTP_200_OK,
+        )
+        
+class BulkSoftDeleteChatSessionsView(APIView):
+    def post(self, request):
+        serializer = BulkSessionIdsSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session_ids = serializer.validated_data["session_ids"]
+
+        sessions = ChatSession.objects.filter(
+            id__in=session_ids,
+            user=request.user,
+            is_deleted=False,
+        )
+
+        deleted_count = 0
+
+        for session in sessions:
+            session.soft_delete()
+            deleted_count += 1
+
+        return Response(
+            {
+                "success": True,
+                "message": "Selected chat sessions moved to trash successfully",
+                "requested_count": len(session_ids),
+                "deleted_count": deleted_count,
             },
             status=status.HTTP_200_OK,
         )

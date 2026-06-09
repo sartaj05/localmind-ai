@@ -126,3 +126,9 @@ class AIUsageLogSerializer(serializers.ModelSerializer):
             "response_time_ms",
             "created_at",
         ]
+class BulkSessionIdsSerializer(serializers.Serializer):
+    session_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True,
+        allow_empty=False,
+    )
