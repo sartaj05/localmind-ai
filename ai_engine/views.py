@@ -15,6 +15,7 @@ from .models import (
 from .serializers import (
     AskAIRequestSerializer,
     AIChatHistorySerializer,
+    ChatMessageSerializer,
     ChatSessionSerializer,
     ChatSessionDetailSerializer,
     CreateChatSessionSerializer,
@@ -1201,6 +1202,32 @@ class ExportChatSessionTXTView(APIView):
         response = HttpResponse(content, content_type="text/plain")
         response["Content-Disposition"] = (
             f'attachment; filename="chat_session_{session.id}.txt"'
+        )
+
+        return response
+    
+class ExportChatSessionJSONView(APIView):
+    def get(self, request, pk):
+        try:
+            session = ChatSession.objects.get(pk=pk, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        data = {
+            "id": session.id,
+            "title": session.title,
+            "model_name": session.model_name,
+            "created_at": session.created_at,
+            "updated_at": session.updated_at,
+            "messages": ChatMessageSerializer(session.messages.all(), many=True).data,
+        }
+
+        response = Response(data, status=status.HTTP_200_OK)
+        response["Content-Disposition"] = (
+            f'attachment; filename="chat_session_{session.id}.json"'
         )
 
         return response
