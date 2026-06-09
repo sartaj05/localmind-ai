@@ -7,6 +7,7 @@ from .views import (
     BulkPermanentDeleteChatSessionsView,
     ChatSessionListCreateView,
     ChatSessionDetailView,
+    EmptyTrashChatSessionsView,
     SendSessionMessageView,
     BuildKnowledgeBaseView,
     AskRAGView,
@@ -202,5 +203,10 @@ urlpatterns = [
         "sessions/bulk-permanent-delete/",
         BulkPermanentDeleteChatSessionsView.as_view(),
         name="bulk-permanent-delete-chat-sessions",
+    ),
+    path(
+        "sessions/trash/empty/",
+        EmptyTrashChatSessionsView.as_view(),
+        name="empty-trash-chat-sessions",
     ),
 ]

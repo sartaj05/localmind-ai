@@ -1985,3 +1985,22 @@ class BulkPermanentDeleteChatSessionsView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class EmptyTrashChatSessionsView(APIView):
+    def delete(self, request):
+        sessions = ChatSession.objects.filter(
+            user=request.user,
+            is_deleted=True,
+        )
+
+        deleted_count = sessions.count()
+        sessions.delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Trash emptied successfully",
+                "deleted_count": deleted_count,
+            },
+            status=status.HTTP_200_OK,
+        )
