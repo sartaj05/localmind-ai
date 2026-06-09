@@ -1739,3 +1739,42 @@ class SearchChatSessionMessagesView(APIView):
                 "results": serializer.data,
             }
         )
+        
+        
+class ToggleImportantChatMessageView(APIView):
+    def patch(self, request, session_pk, message_pk):
+        try:
+            session = ChatSession.objects.get(
+                pk=session_pk,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            message = ChatMessage.objects.get(
+                pk=message_pk,
+                session=session,
+            )
+        except ChatMessage.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat message not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        message.is_important = not message.is_important
+        message.save(update_fields=["is_important"])
+
+        return Response(
+            {
+                "success": True,
+                "message": "Chat message important status updated successfully",
+                "is_important": message.is_important,
+                "result": ChatMessageSerializer(message).data,
+            },
+            status=status.HTTP_200_OK,
+        )

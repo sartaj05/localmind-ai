@@ -36,6 +36,7 @@ from .views import (
     ChatSessionStatsView,
     DuplicateChatSessionView,
     SearchChatSessionMessagesView,
+    ToggleImportantChatMessageView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -160,5 +161,10 @@ urlpatterns = [
         "sessions/<int:pk>/search-messages/",
         SearchChatSessionMessagesView.as_view(),
         name="search-chat-session-messages",
+    ),
+    path(
+        "sessions/<int:session_pk>/messages/<int:message_pk>/toggle-important/",
+        ToggleImportantChatMessageView.as_view(),
+        name="toggle-important-chat-message",
     ),
 ]

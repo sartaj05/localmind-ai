@@ -54,7 +54,6 @@ class ChatSession(models.Model):
     def __str__(self):
         return self.title
 
-
 class ChatMessage(models.Model):
     ROLE_CHOICES = (
         ("user", "User"),
@@ -68,6 +67,7 @@ class ChatMessage(models.Model):
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     content = models.TextField()
+    is_important = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -75,7 +75,6 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"{self.role}: {self.content[:50]}"
-
 
 class KnowledgeDocument(models.Model):
     user = models.ForeignKey(

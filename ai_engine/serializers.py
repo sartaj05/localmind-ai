@@ -39,6 +39,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
             "id",
             "role",
             "content",
+            "is_important",
             "created_at",
         ]
 
