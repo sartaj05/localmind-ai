@@ -21,6 +21,7 @@ from .rag_service import (
 from .serializers import (
     AskAIRequestSerializer,
     AIChatHistorySerializer,
+    BulkMessageIdsSerializer,
     BulkSessionIdsSerializer,
     ChatMessageSerializer,
     ChatSessionSerializer,
@@ -2065,6 +2066,38 @@ class BulkArchiveChatSessionsView(APIView):
                 "requested_count": len(session_ids),
                 "updated_count": updated_count,
                 "is_archived": is_archived,
+            },
+            status=status.HTTP_200_OK,
+        )
+        
+class BulkImportantChatMessagesView(APIView):
+    def post(self, request):
+        serializer = BulkMessageIdsSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        message_ids = serializer.validated_data["message_ids"]
+        is_important = request.data.get("is_important", True)
+
+        messages = ChatMessage.objects.filter(
+            id__in=message_ids,
+            session__user=request.user,
+            session__is_deleted=False,
+        )
+
+        updated_count = messages.update(is_important=is_important)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Selected chat messages important status updated successfully",
+                "requested_count": len(message_ids),
+                "updated_count": updated_count,
+                "is_important": is_important,
             },
             status=status.HTTP_200_OK,
         )

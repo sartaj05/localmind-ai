@@ -132,3 +132,9 @@ class BulkSessionIdsSerializer(serializers.Serializer):
         required=True,
         allow_empty=False,
     )
+class BulkMessageIdsSerializer(serializers.Serializer):
+    message_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True,
+        allow_empty=False,
+    )
