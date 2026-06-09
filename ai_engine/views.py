@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.http import StreamingHttpResponse
+from django.http import StreamingHttpResponse, HttpResponse
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -1166,3 +1166,41 @@ class RegenerateRAGChatMessageView(APIView):
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+class ExportChatSessionTXTView(APIView):
+    def get(self, request, pk):
+        try:
+            session = ChatSession.objects.get(pk=pk, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        lines = []
+        lines.append(f"Chat Title: {session.title}")
+        lines.append(f"Model: {session.model_name}")
+        lines.append(f"Created At: {session.created_at}")
+        lines.append(f"Updated At: {session.updated_at}")
+        lines.append("")
+        lines.append("=" * 60)
+        lines.append("MESSAGES")
+        lines.append("=" * 60)
+        lines.append("")
+
+        for message in session.messages.all():
+            role = "User" if message.role == "user" else "Assistant"
+            lines.append(f"{role}:")
+            lines.append(message.content)
+            lines.append("")
+            lines.append("-" * 60)
+            lines.append("")
+
+        content = "\n".join(lines)
+
+        response = HttpResponse(content, content_type="text/plain")
+        response["Content-Disposition"] = (
+            f'attachment; filename="chat_session_{session.id}.txt"'
+        )
+
+        return response
