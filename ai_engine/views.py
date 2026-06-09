@@ -902,3 +902,18 @@ class ClearKnowledgeDocumentsView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class ClearAIUsageLogsView(APIView):
+    def delete(self, request):
+        logs = AIUsageLog.objects.filter(user=request.user)
+        deleted_count = logs.count()
+        logs.delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "AI usage logs cleared successfully",
+                "deleted_logs": deleted_count,
+            },
+            status=status.HTTP_200_OK,
+        )
