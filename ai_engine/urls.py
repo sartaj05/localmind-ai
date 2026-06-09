@@ -26,6 +26,7 @@ from .views import (
     RegenerateRAGChatMessageView,
     ExportChatSessionTXTView,
     ExportChatSessionJSONView,
+    KnowledgeBaseStatusView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -100,6 +101,11 @@ urlpatterns = [
         "sessions/<int:pk>/export-json/",
         ExportChatSessionJSONView.as_view(),
         name="export-chat-session-json",
+    ),
+    path(
+        "rag/status/",
+        KnowledgeBaseStatusView.as_view(),
+        name="rag-status",
     ),
     
 ]

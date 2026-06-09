@@ -36,7 +36,7 @@ from .services import (
 from .rag_service import build_knowledge_base, search_knowledge
 from .streaming import stream_ollama_response
 from .logging_service import create_usage_log, now_ms
-
+from .rag_service import build_knowledge_base, search_knowledge, get_user_collection_stats
 
 class AskAIView(APIView):
     def post(self, request):
@@ -1286,3 +1286,21 @@ class ExportChatSessionJSONView(APIView):
         )
 
         return response
+    
+    
+class KnowledgeBaseStatusView(APIView):
+    def get(self, request):
+        total_documents = KnowledgeDocument.objects.filter(user=request.user).count()
+        stats = get_user_collection_stats(request.user)
+
+        return Response(
+            {
+                "success": True,
+                "knowledge_base": {
+                    "total_documents": total_documents,
+                    "total_chunks": stats["total_chunks"],
+                    "is_indexed": stats["is_indexed"],
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

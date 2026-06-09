@@ -149,3 +149,15 @@ def search_knowledge(query, user, top_k=3):
         )
 
     return "\n\n".join(context_parts)
+
+def get_user_collection_stats(user):
+    existing = collection.get(
+        where={"user_id": user.id}
+    )
+
+    ids = existing.get("ids", []) if existing else []
+
+    return {
+        "total_chunks": len(ids),
+        "is_indexed": len(ids) > 0,
+    }
