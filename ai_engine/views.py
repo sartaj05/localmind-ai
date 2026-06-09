@@ -1919,3 +1919,38 @@ class BulkSoftDeleteChatSessionsView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+        
+class BulkRestoreChatSessionsView(APIView):
+    def post(self, request):
+        serializer = BulkSessionIdsSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session_ids = serializer.validated_data["session_ids"]
+
+        sessions = ChatSession.objects.filter(
+            id__in=session_ids,
+            user=request.user,
+            is_deleted=True,
+        )
+
+        restored_count = 0
+
+        for session in sessions:
+            session.restore()
+            restored_count += 1
+
+        return Response(
+            {
+                "success": True,
+                "message": "Selected chat sessions restored successfully",
+                "requested_count": len(session_ids),
+                "restored_count": restored_count,
+            },
+            status=status.HTTP_200_OK,
+        )

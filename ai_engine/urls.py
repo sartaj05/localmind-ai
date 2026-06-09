@@ -41,6 +41,7 @@ from .views import (
     ChatSessionTimelineView,
     ChatSessionPreviewView,
     BulkSoftDeleteChatSessionsView,
+    BulkRestoreChatSessionsView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -190,5 +191,10 @@ urlpatterns = [
         "sessions/bulk-delete/",
         BulkSoftDeleteChatSessionsView.as_view(),
         name="bulk-delete-chat-sessions",
+    ),
+    path(
+        "sessions/bulk-restore/",
+        BulkRestoreChatSessionsView.as_view(),
+        name="bulk-restore-chat-sessions",
     ),
 ]
