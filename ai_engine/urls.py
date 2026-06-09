@@ -21,6 +21,7 @@ from .views import (
     ClearAIChatHistoryView,
     ClearKnowledgeDocumentsView,
     ClearAIUsageLogsView,
+    ChatMessageDetailView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -70,5 +71,10 @@ urlpatterns = [
         "usage-logs/clear/",
         ClearAIUsageLogsView.as_view(),
         name="clear-ai-usage-logs",
+    ),
+    path(
+        "sessions/<int:session_pk>/messages/<int:message_pk>/",
+        ChatMessageDetailView.as_view(),
+        name="chat-message-detail",
     ),
 ]

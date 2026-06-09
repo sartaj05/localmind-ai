@@ -917,3 +917,31 @@ class ClearAIUsageLogsView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class ChatMessageDetailView(APIView):
+    def delete(self, request, session_pk, message_pk):
+        try:
+            session = ChatSession.objects.get(pk=session_pk, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            message = ChatMessage.objects.get(pk=message_pk, session=session)
+        except ChatMessage.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat message not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        message.delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Chat message deleted successfully",
+            },
+            status=status.HTTP_200_OK,
+        )
