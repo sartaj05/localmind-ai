@@ -1607,3 +1607,48 @@ class StreamSessionMessageView(APIView):
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+class ChatSessionStatsView(APIView):
+    def get(self, request, pk):
+        try:
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        messages = session.messages.all()
+        last_message = messages.last()
+
+        return Response(
+            {
+                "success": True,
+                "session": {
+                    "id": session.id,
+                    "title": session.title,
+                    "model_name": session.model_name,
+                    "is_pinned": session.is_pinned,
+                    "is_archived": session.is_archived,
+                    "is_deleted": session.is_deleted,
+                    "created_at": session.created_at,
+                    "updated_at": session.updated_at,
+                },
+                "stats": {
+                    "total_messages": messages.count(),
+                    "user_messages": messages.filter(role="user").count(),
+                    "assistant_messages": messages.filter(role="assistant").count(),
+                    "last_message": {
+                        "id": last_message.id,
+                        "role": last_message.role,
+                        "content": last_message.content,
+                        "created_at": last_message.created_at,
+                    } if last_message else None,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

@@ -33,6 +33,7 @@ from .views import (
     RestoreChatSessionView,
     PermanentDeleteChatSessionView,
     StreamSessionMessageView,
+    ChatSessionStatsView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -142,6 +143,11 @@ urlpatterns = [
         "sessions/<int:pk>/stream-message/",
         StreamSessionMessageView.as_view(),
         name="stream-session-message",
+    ),
+    path(
+        "sessions/<int:pk>/stats/",
+        ChatSessionStatsView.as_view(),
+        name="chat-session-stats",
     ),
     
 ]
