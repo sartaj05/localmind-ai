@@ -1954,3 +1954,34 @@ class BulkRestoreChatSessionsView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class BulkPermanentDeleteChatSessionsView(APIView):
+    def post(self, request):
+        serializer = BulkSessionIdsSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session_ids = serializer.validated_data["session_ids"]
+
+        sessions = ChatSession.objects.filter(
+            id__in=session_ids,
+            user=request.user,
+            is_deleted=True,
+        )
+
+        deleted_count = sessions.count()
+        sessions.delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Selected chat sessions permanently deleted successfully",
+                "requested_count": len(session_ids),
+                "deleted_count": deleted_count,
+            },
+            status=status.HTTP_200_OK,
+        )

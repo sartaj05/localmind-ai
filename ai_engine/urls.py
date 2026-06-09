@@ -4,6 +4,7 @@ from .views import (
     AskAIView,
     AIChatHistoryListView,
     AIChatHistoryDetailView,
+    BulkPermanentDeleteChatSessionsView,
     ChatSessionListCreateView,
     ChatSessionDetailView,
     SendSessionMessageView,
@@ -196,5 +197,10 @@ urlpatterns = [
         "sessions/bulk-restore/",
         BulkRestoreChatSessionsView.as_view(),
         name="bulk-restore-chat-sessions",
+    ),
+    path(
+        "sessions/bulk-permanent-delete/",
+        BulkPermanentDeleteChatSessionsView.as_view(),
+        name="bulk-permanent-delete-chat-sessions",
     ),
 ]
