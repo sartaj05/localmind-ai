@@ -1072,3 +1072,97 @@ class RegenerateChatMessageView(APIView):
                 {"success": False, "error": str(error)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+class RegenerateRAGChatMessageView(APIView):
+    def post(self, request, session_pk, message_pk):
+        started_at = now_ms()
+
+        try:
+            session = ChatSession.objects.get(pk=session_pk, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            user_message = ChatMessage.objects.get(
+                pk=message_pk,
+                session=session,
+                role="user",
+            )
+        except ChatMessage.DoesNotExist:
+            return Response(
+                {"success": False, "error": "User message not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        model = request.data.get("model") or session.model_name
+        top_k = request.data.get("top_k") or 3
+
+        try:
+            rag_context = search_knowledge(
+                query=user_message.content,
+                user=request.user,
+                top_k=top_k,
+            )
+
+            context_prompt = build_rag_context_prompt(
+                messages=session.messages.filter(created_at__lt=user_message.created_at),
+                new_message=user_message.content,
+                rag_context=rag_context,
+            )
+
+            ai_answer = ask_local_model(
+                prompt=context_prompt,
+                model=model,
+            )
+
+            assistant_message = ChatMessage.objects.create(
+                session=session,
+                role="assistant",
+                content=ai_answer,
+            )
+
+            session.model_name = model
+            session.save(update_fields=["model_name", "updated_at"])
+
+            create_usage_log(
+                user=request.user,
+                endpoint=f"/api/ai/sessions/{session_pk}/messages/{message_pk}/regenerate-rag/",
+                model_name=model,
+                prompt=user_message.content,
+                success=True,
+                started_at_ms=started_at,
+            )
+
+            return Response(
+                {
+                    "success": True,
+                    "message": "RAG AI answer regenerated successfully",
+                    "rag_context": rag_context,
+                    "assistant_message": {
+                        "id": assistant_message.id,
+                        "role": assistant_message.role,
+                        "content": assistant_message.content,
+                        "created_at": assistant_message.created_at,
+                    },
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as error:
+            create_usage_log(
+                user=request.user,
+                endpoint=f"/api/ai/sessions/{session_pk}/messages/{message_pk}/regenerate-rag/",
+                model_name=model,
+                prompt=user_message.content,
+                success=False,
+                error_message=str(error),
+                started_at_ms=started_at,
+            )
+
+            return Response(
+                {"success": False, "error": str(error)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

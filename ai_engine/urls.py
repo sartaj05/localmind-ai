@@ -23,6 +23,7 @@ from .views import (
     ClearAIUsageLogsView,
     ChatMessageDetailView,
     RegenerateChatMessageView,
+    RegenerateRAGChatMessageView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -82,5 +83,10 @@ urlpatterns = [
         "sessions/<int:session_pk>/messages/<int:message_pk>/regenerate/",
         RegenerateChatMessageView.as_view(),
         name="regenerate-chat-message",
+    ),
+    path(
+        "sessions/<int:session_pk>/messages/<int:message_pk>/regenerate-rag/",
+        RegenerateRAGChatMessageView.as_view(),
+        name="regenerate-rag-chat-message",
     ),
 ]
