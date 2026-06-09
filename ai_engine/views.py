@@ -37,6 +37,16 @@ from .rag_service import build_knowledge_base, search_knowledge
 from .streaming import stream_ollama_response
 from .logging_service import create_usage_log, now_ms
 from .rag_service import build_knowledge_base, search_knowledge, get_user_collection_stats
+from .services import (
+    ask_local_model,
+    build_context_prompt,
+    build_rag_context_prompt,
+    list_local_models,
+    check_ollama_health,
+    generate_chat_title,
+)
+
+
 
 class AskAIView(APIView):
     def post(self, request):
@@ -299,7 +309,10 @@ class SendSessionMessageView(APIView):
             session.model_name = model
 
             if session.title == "New Chat":
-                session.title = user_message[:50]
+                session.title = generate_chat_title(
+                    user_message=user_message,
+                    model=model,
+                )
 
             session.save(update_fields=["model_name", "title", "updated_at"])
 
@@ -645,8 +658,10 @@ class SendSessionRAGMessageView(APIView):
             session.model_name = model
 
             if session.title == "New Chat":
-                session.title = user_message[:50]
-
+                session.title = generate_chat_title(
+                    user_message=user_message,
+                    model=model,
+    )
             session.save(update_fields=["model_name", "title", "updated_at"])
 
             create_usage_log(
@@ -769,7 +784,10 @@ class StreamSessionRAGMessageView(APIView):
                     session.model_name = model
 
                     if session.title == "New Chat":
-                        session.title = user_message[:50]
+                        session.title = generate_chat_title(
+                            user_message=user_message,
+                            model=model,
+                        )
 
                     session.save(update_fields=["model_name", "title", "updated_at"])
 

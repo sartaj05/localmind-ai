@@ -128,3 +128,31 @@ def check_ollama_health():
             "available": False,
             "error": str(error),
         }
+        
+def generate_chat_title(user_message: str, model: str | None = None) -> str:
+    prompt = f"""
+Create a short chat title for this user message.
+
+Rules:
+- Maximum 5 words
+- No quotes
+- No full sentence
+- Return only the title
+
+User message:
+{user_message}
+
+Title:
+"""
+
+    title = ask_local_model(
+        prompt=prompt,
+        model=model,
+    )
+
+    title = title.strip().replace('"', "").replace("'", "")
+
+    if not title:
+        return user_message[:50]
+
+    return title[:80]
