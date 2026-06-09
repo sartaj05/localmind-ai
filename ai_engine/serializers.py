@@ -5,8 +5,14 @@ from .models import (
     AIUsageLog,
     ChatSession,
     ChatMessage,
+    ChatSessionTag,
     KnowledgeDocument,
 )
+
+class ChatSessionTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatSessionTag
+        fields = ["id", "name", "color", "created_at"]
 
 
 class AskAIRequestSerializer(serializers.Serializer):
@@ -46,7 +52,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 
 class ChatSessionSerializer(serializers.ModelSerializer):
     message_count = serializers.SerializerMethodField()
-
+    tags = ChatSessionTagSerializer(many=True, read_only=True)
     class Meta:
         model = ChatSession
         fields = [
@@ -60,6 +66,7 @@ class ChatSessionSerializer(serializers.ModelSerializer):
             "message_count",
             "created_at",
             "updated_at",
+            "tags",
         ]
 
     def get_message_count(self, obj):
@@ -137,4 +144,25 @@ class BulkMessageIdsSerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         required=True,
         allow_empty=False,
+    )
+    
+class CopyMessagesSerializer(serializers.Serializer):
+    message_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True,
+        allow_empty=False,
+    )
+    target_session_id = serializers.IntegerField(required=True)
+
+
+class MergeSessionsSerializer(serializers.Serializer):
+    source_session_id = serializers.IntegerField(required=True)
+    target_session_id = serializers.IntegerField(required=True)
+
+
+class SessionTagAssignSerializer(serializers.Serializer):
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True,
+        allow_empty=True,
     )

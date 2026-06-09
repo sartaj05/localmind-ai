@@ -9,11 +9,14 @@ from .models import (
     AIChatHistory,
     ChatSession,
     ChatMessage,
+    ChatSessionTag,
     KnowledgeDocument,
     AIUsageLog,
 )
 from .rag_service import (
     build_knowledge_base,
+    get_document_chunks,
+    rebuild_single_document,
     search_knowledge,
     get_user_collection_stats,
     search_knowledge_with_sources,
@@ -26,12 +29,16 @@ from .serializers import (
     ChatMessageSerializer,
     ChatSessionSerializer,
     ChatSessionDetailSerializer,
+    ChatSessionTagSerializer,
+    CopyMessagesSerializer,
     CreateChatSessionSerializer,
     KnowledgeDocumentSerializer,
+    MergeSessionsSerializer,
     RenameChatSessionSerializer,
     SendSessionMessageSerializer,
     SendSessionRAGMessageSerializer,
     AIUsageLogSerializer,
+    SessionTagAssignSerializer,
 )
 from .pagination import StandardResultsSetPagination
 from .services import (
@@ -2167,4 +2174,283 @@ class BulkClearSessionMessagesView(APIView):
                 "deleted_messages": deleted_messages,
             },
             status=status.HTTP_200_OK,
+        )
+class CopyChatMessagesView(APIView):
+    def post(self, request):
+        serializer = CopyMessagesSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response({"success": False, "errors": serializer.errors}, status=400)
+
+        message_ids = serializer.validated_data["message_ids"]
+        target_session_id = serializer.validated_data["target_session_id"]
+
+        try:
+            target_session = ChatSession.objects.get(
+                id=target_session_id,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response({"success": False, "error": "Target session not found"}, status=404)
+
+        messages = ChatMessage.objects.filter(
+            id__in=message_ids,
+            session__user=request.user,
+            session__is_deleted=False,
+        ).order_by("created_at")
+
+        copied = [
+            ChatMessage(
+                session=target_session,
+                role=message.role,
+                content=message.content,
+                is_important=message.is_important,
+            )
+            for message in messages
+        ]
+
+        ChatMessage.objects.bulk_create(copied)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Messages copied successfully",
+                "requested_count": len(message_ids),
+                "copied_count": len(copied),
+                "target_session": ChatSessionSerializer(target_session).data,
+            }
+        )
+
+
+class MergeChatSessionsView(APIView):
+    def post(self, request):
+        serializer = MergeSessionsSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response({"success": False, "errors": serializer.errors}, status=400)
+
+        source_id = serializer.validated_data["source_session_id"]
+        target_id = serializer.validated_data["target_session_id"]
+
+        if source_id == target_id:
+            return Response(
+                {"success": False, "error": "Source and target sessions cannot be same"},
+                status=400,
+            )
+
+        try:
+            source = ChatSession.objects.get(id=source_id, user=request.user, is_deleted=False)
+            target = ChatSession.objects.get(id=target_id, user=request.user, is_deleted=False)
+        except ChatSession.DoesNotExist:
+            return Response({"success": False, "error": "Source or target session not found"}, status=404)
+
+        moved_count = source.messages.update(session=target)
+        target.tags.add(*source.tags.all())
+        source.soft_delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Chat sessions merged successfully",
+                "moved_messages": moved_count,
+                "source_session_id": source.id,
+                "target_session": ChatSessionDetailSerializer(target).data,
+            }
+        )
+
+
+class ChatSessionTagListCreateView(APIView):
+    def get(self, request):
+        tags = ChatSessionTag.objects.filter(user=request.user)
+        serializer = ChatSessionTagSerializer(tags, many=True)
+
+        return Response({"success": True, "results": serializer.data})
+
+    def post(self, request):
+        name = request.data.get("name")
+        color = request.data.get("color", "")
+
+        if not name:
+            return Response({"success": False, "error": "Tag name is required"}, status=400)
+
+        tag, created = ChatSessionTag.objects.get_or_create(
+            user=request.user,
+            name=name,
+            defaults={"color": color},
+        )
+
+        if not created and color:
+            tag.color = color
+            tag.save(update_fields=["color"])
+
+        return Response(
+            {
+                "success": True,
+                "message": "Tag saved successfully",
+                "created": created,
+                "result": ChatSessionTagSerializer(tag).data,
+            },
+            status=201 if created else 200,
+        )
+
+
+class ChatSessionTagDetailView(APIView):
+    def patch(self, request, pk):
+        try:
+            tag = ChatSessionTag.objects.get(pk=pk, user=request.user)
+        except ChatSessionTag.DoesNotExist:
+            return Response({"success": False, "error": "Tag not found"}, status=404)
+
+        name = request.data.get("name")
+        color = request.data.get("color")
+
+        if name:
+            tag.name = name
+
+        if color is not None:
+            tag.color = color
+
+        tag.save()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Tag updated successfully",
+                "result": ChatSessionTagSerializer(tag).data,
+            }
+        )
+
+    def delete(self, request, pk):
+        try:
+            tag = ChatSessionTag.objects.get(pk=pk, user=request.user)
+        except ChatSessionTag.DoesNotExist:
+            return Response({"success": False, "error": "Tag not found"}, status=404)
+
+        tag.delete()
+
+        return Response({"success": True, "message": "Tag deleted successfully"})
+
+
+class AssignTagsToChatSessionView(APIView):
+    def post(self, request, pk):
+        try:
+            session = ChatSession.objects.get(pk=pk, user=request.user, is_deleted=False)
+        except ChatSession.DoesNotExist:
+            return Response({"success": False, "error": "Chat session not found"}, status=404)
+
+        serializer = SessionTagAssignSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response({"success": False, "errors": serializer.errors}, status=400)
+
+        tag_ids = serializer.validated_data["tag_ids"]
+
+        tags = ChatSessionTag.objects.filter(
+            id__in=tag_ids,
+            user=request.user,
+        )
+
+        session.tags.set(tags)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Session tags updated successfully",
+                "result": ChatSessionDetailSerializer(session).data,
+            }
+        )
+
+
+class ChatSessionsByTagView(APIView):
+    def get(self, request, tag_id):
+        try:
+            tag = ChatSessionTag.objects.get(id=tag_id, user=request.user)
+        except ChatSessionTag.DoesNotExist:
+            return Response({"success": False, "error": "Tag not found"}, status=404)
+
+        sessions = ChatSession.objects.filter(
+            user=request.user,
+            tags=tag,
+            is_deleted=False,
+        )
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(sessions, request)
+
+        serializer = ChatSessionSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
+            {
+                "success": True,
+                "tag": ChatSessionTagSerializer(tag).data,
+                "results": serializer.data,
+            }
+        )
+
+
+class RAGSourceDocumentDetailView(APIView):
+    def get(self, request, document_id):
+        try:
+            document = KnowledgeDocument.objects.get(
+                id=document_id,
+                user=request.user,
+            )
+        except KnowledgeDocument.DoesNotExist:
+            return Response({"success": False, "error": "Document not found"}, status=404)
+
+        chunks = get_document_chunks(request.user, document.id)
+
+        return Response(
+            {
+                "success": True,
+                "document": KnowledgeDocumentSerializer(document).data,
+                "total_chunks": len(chunks),
+                "chunks_preview": chunks[:5],
+            }
+        )
+
+
+class DocumentChunksPreviewView(APIView):
+    def get(self, request, document_id):
+        try:
+            document = KnowledgeDocument.objects.get(
+                id=document_id,
+                user=request.user,
+            )
+        except KnowledgeDocument.DoesNotExist:
+            return Response({"success": False, "error": "Document not found"}, status=404)
+
+        chunks = get_document_chunks(request.user, document.id)
+
+        return Response(
+            {
+                "success": True,
+                "document_id": document.id,
+                "document_title": document.title,
+                "total_chunks": len(chunks),
+                "chunks": chunks,
+            }
+        )
+
+
+class RebuildSingleDocumentView(APIView):
+    def post(self, request, document_id):
+        try:
+            document = KnowledgeDocument.objects.get(
+                id=document_id,
+                user=request.user,
+            )
+        except KnowledgeDocument.DoesNotExist:
+            return Response({"success": False, "error": "Document not found"}, status=404)
+
+        total_chunks = rebuild_single_document(request.user, document)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Single document rebuilt successfully",
+                "document": KnowledgeDocumentSerializer(document).data,
+                "total_chunks": total_chunks,
+            }
         )

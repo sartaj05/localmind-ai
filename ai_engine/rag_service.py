@@ -202,3 +202,84 @@ def search_knowledge_with_sources(query, user, top_k=3):
         "context": "\n\n".join(context_parts),
         "sources": sources,
     }
+    
+def get_document_chunks(user, document_id):
+    results = collection.get(
+        where={
+            "$and": [
+                {"user_id": user.id},
+                {"document_id": document_id},
+            ]
+        }
+    )
+
+    chunks = []
+
+    documents = results.get("documents", []) if results else []
+    metadatas = results.get("metadatas", []) if results else []
+    ids = results.get("ids", []) if results else []
+
+    for index, document in enumerate(documents):
+        metadata = metadatas[index] if index < len(metadatas) else {}
+
+        chunks.append(
+            {
+                "chunk_id": ids[index],
+                "source": metadata.get("source"),
+                "file_name": metadata.get("file_name"),
+                "content": document,
+                "preview": document[:300],
+            }
+        )
+
+    return chunks
+
+
+def rebuild_single_document(user, document):
+    existing = collection.get(
+        where={
+            "$and": [
+                {"user_id": user.id},
+                {"document_id": document.id},
+            ]
+        }
+    )
+
+    if existing and existing.get("ids"):
+        collection.delete(ids=existing["ids"])
+
+    file_path = document.file.path
+
+    if not os.path.exists(file_path):
+        return 0
+
+    text = extract_text_from_document(file_path)
+
+    if not text.strip():
+        return 0
+
+    chunks = chunk_text(text)
+    model = get_embedding_model()
+    chunk_count = 0
+
+    for index, chunk in enumerate(chunks):
+        chunk_id = f"user_{user.id}_doc_{document.id}_chunk_{index}"
+        embedding = model.encode(chunk).tolist()
+
+        collection.add(
+            ids=[chunk_id],
+            documents=[chunk],
+            embeddings=[embedding],
+            metadatas=[
+                {
+                    "user_id": user.id,
+                    "document_id": document.id,
+                    "source": document.title,
+                    "file_name": os.path.basename(file_path),
+                }
+            ],
+        )
+
+        chunk_count += 1
+
+    return chunk_count

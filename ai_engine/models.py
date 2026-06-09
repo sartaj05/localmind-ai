@@ -21,7 +21,22 @@ class AIChatHistory(models.Model):
     def __str__(self):
         return f"{self.model_name} - {self.prompt[:50]}"
 
+class ChatSessionTag(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="chat_session_tags",
+    )
+    name = models.CharField(max_length=100)
+    color = models.CharField(max_length=30, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ["name"]
+        unique_together = ["user", "name"]
+
+    def __str__(self):
+        return self.name
 class ChatSession(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -29,6 +44,11 @@ class ChatSession(models.Model):
         related_name="ai_chat_sessions",
         null=True,
         blank=True,
+    )
+    tags = models.ManyToManyField(
+        ChatSessionTag,
+        blank=True,
+        related_name="sessions",
     )
     title = models.CharField(max_length=255, default="New Chat")
     model_name = models.CharField(max_length=100, default="phi3")
@@ -113,3 +133,4 @@ class AIUsageLog(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.endpoint} - {self.success}"
+    
