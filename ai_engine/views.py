@@ -883,3 +883,22 @@ class ClearAIChatHistoryView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class ClearKnowledgeDocumentsView(APIView):
+    def delete(self, request):
+        documents = KnowledgeDocument.objects.filter(user=request.user)
+        deleted_count = documents.count()
+
+        for document in documents:
+            document.file.delete(save=False)
+
+        documents.delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "All knowledge documents deleted successfully. Rebuild knowledge base after deleting.",
+                "deleted_documents": deleted_count,
+            },
+            status=status.HTTP_200_OK,
+        )

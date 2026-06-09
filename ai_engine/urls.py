@@ -19,6 +19,7 @@ from .views import (
     AIDashboardSummaryView,
     AIRecentActivityView,
     ClearAIChatHistoryView,
+    ClearKnowledgeDocumentsView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -58,5 +59,10 @@ urlpatterns = [
         "history/clear/",
         ClearAIChatHistoryView.as_view(),
         name="clear-ai-chat-history",
+    ),
+    path(
+        "documents/clear/",
+        ClearKnowledgeDocumentsView.as_view(),
+        name="clear-knowledge-documents",
     ),
 ]
