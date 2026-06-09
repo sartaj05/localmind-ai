@@ -1847,3 +1847,40 @@ class ChatSessionTimelineView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class ChatSessionPreviewView(APIView):
+    def get(self, request, pk):
+        try:
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        first_message = session.messages.first()
+        last_message = session.messages.last()
+
+        return Response(
+            {
+                "success": True,
+                "session": {
+                    "id": session.id,
+                    "title": session.title,
+                    "model_name": session.model_name,
+                    "is_pinned": session.is_pinned,
+                    "is_archived": session.is_archived,
+                    "created_at": session.created_at,
+                    "updated_at": session.updated_at,
+                },
+                "preview": {
+                    "first_message": ChatMessageSerializer(first_message).data if first_message else None,
+                    "last_message": ChatMessageSerializer(last_message).data if last_message else None,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

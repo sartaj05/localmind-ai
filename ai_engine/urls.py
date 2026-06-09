@@ -39,6 +39,7 @@ from .views import (
     ToggleImportantChatMessageView,
     ImportantChatMessagesListView,
     ChatSessionTimelineView,
+    ChatSessionPreviewView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -178,5 +179,10 @@ urlpatterns = [
         "sessions/<int:pk>/timeline/",
         ChatSessionTimelineView.as_view(),
         name="chat-session-timeline",
+    ),
+    path(
+        "sessions/<int:pk>/preview/",
+        ChatSessionPreviewView.as_view(),
+        name="chat-session-preview",
     ),
 ]
