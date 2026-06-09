@@ -1803,3 +1803,47 @@ class ImportantChatMessagesListView(APIView):
                 "results": serializer.data,
             }
         )
+        
+class ChatSessionTimelineView(APIView):
+    def get(self, request, pk):
+        try:
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        messages = session.messages.all()
+
+        timeline = []
+
+        for index, message in enumerate(messages, start=1):
+            timeline.append(
+                {
+                    "number": index,
+                    "id": message.id,
+                    "role": message.role,
+                    "content": message.content,
+                    "is_important": message.is_important,
+                    "created_at": message.created_at,
+                }
+            )
+
+        return Response(
+            {
+                "success": True,
+                "session": {
+                    "id": session.id,
+                    "title": session.title,
+                    "model_name": session.model_name,
+                },
+                "total_messages": len(timeline),
+                "timeline": timeline,
+            },
+            status=status.HTTP_200_OK,
+        )
