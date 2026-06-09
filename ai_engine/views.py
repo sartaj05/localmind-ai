@@ -2036,3 +2036,35 @@ class BulkPinChatSessionsView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class BulkArchiveChatSessionsView(APIView):
+    def post(self, request):
+        serializer = BulkSessionIdsSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session_ids = serializer.validated_data["session_ids"]
+        is_archived = request.data.get("is_archived", True)
+
+        sessions = ChatSession.objects.filter(
+            id__in=session_ids,
+            user=request.user,
+            is_deleted=False,
+        )
+
+        updated_count = sessions.update(is_archived=is_archived)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Selected chat sessions archive status updated successfully",
+                "requested_count": len(session_ids),
+                "updated_count": updated_count,
+                "is_archived": is_archived,
+            },
+            status=status.HTTP_200_OK,
+        )

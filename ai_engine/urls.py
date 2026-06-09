@@ -4,6 +4,7 @@ from .views import (
     AskAIView,
     AIChatHistoryListView,
     AIChatHistoryDetailView,
+    BulkArchiveChatSessionsView,
     BulkPermanentDeleteChatSessionsView,
     BulkPinChatSessionsView,
     ChatSessionListCreateView,
@@ -214,5 +215,10 @@ urlpatterns = [
         "sessions/bulk-pin/",
         BulkPinChatSessionsView.as_view(),
         name="bulk-pin-chat-sessions",
+    ),
+    path(
+        "sessions/bulk-archive/",
+        BulkArchiveChatSessionsView.as_view(),
+        name="bulk-archive-chat-sessions",
     ),
 ]
