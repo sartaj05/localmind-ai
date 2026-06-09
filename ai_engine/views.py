@@ -2101,3 +2101,34 @@ class BulkImportantChatMessagesView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class BulkDeleteChatMessagesView(APIView):
+    def post(self, request):
+        serializer = BulkMessageIdsSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        message_ids = serializer.validated_data["message_ids"]
+
+        messages = ChatMessage.objects.filter(
+            id__in=message_ids,
+            session__user=request.user,
+            session__is_deleted=False,
+        )
+
+        deleted_count = messages.count()
+        messages.delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Selected chat messages deleted successfully",
+                "requested_count": len(message_ids),
+                "deleted_count": deleted_count,
+            },
+            status=status.HTTP_200_OK,
+        )

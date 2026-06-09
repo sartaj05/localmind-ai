@@ -5,6 +5,7 @@ from .views import (
     AIChatHistoryListView,
     AIChatHistoryDetailView,
     BulkArchiveChatSessionsView,
+    BulkDeleteChatMessagesView,
     BulkImportantChatMessagesView,
     BulkPermanentDeleteChatSessionsView,
     BulkPinChatSessionsView,
@@ -226,5 +227,10 @@ urlpatterns = [
         "messages/bulk-important/",
         BulkImportantChatMessagesView.as_view(),
         name="bulk-important-chat-messages",
+    ),
+    path(
+        "messages/bulk-delete/",
+        BulkDeleteChatMessagesView.as_view(),
+        name="bulk-delete-chat-messages",
     ),
 ]
