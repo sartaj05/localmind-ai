@@ -2132,3 +2132,39 @@ class BulkDeleteChatMessagesView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class BulkClearSessionMessagesView(APIView):
+    def post(self, request):
+        serializer = BulkSessionIdsSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session_ids = serializer.validated_data["session_ids"]
+
+        sessions = ChatSession.objects.filter(
+            id__in=session_ids,
+            user=request.user,
+            is_deleted=False,
+        )
+
+        deleted_messages = 0
+
+        for session in sessions:
+            count = session.messages.count()
+            session.messages.all().delete()
+            deleted_messages += count
+
+        return Response(
+            {
+                "success": True,
+                "message": "Messages cleared from selected sessions successfully",
+                "requested_sessions": len(session_ids),
+                "matched_sessions": sessions.count(),
+                "deleted_messages": deleted_messages,
+            },
+            status=status.HTTP_200_OK,
+        )
