@@ -1652,3 +1652,49 @@ class ChatSessionStatsView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class DuplicateChatSessionView(APIView):
+    def post(self, request, pk):
+        try:
+            original_session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        new_title = request.data.get("title") or f"Copy of {original_session.title}"
+
+        new_session = ChatSession.objects.create(
+            user=request.user,
+            title=new_title,
+            model_name=original_session.model_name,
+            is_pinned=False,
+            is_archived=False,
+        )
+
+        messages_to_create = []
+
+        for message in original_session.messages.all():
+            messages_to_create.append(
+                ChatMessage(
+                    session=new_session,
+                    role=message.role,
+                    content=message.content,
+                )
+            )
+
+        ChatMessage.objects.bulk_create(messages_to_create)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Chat session duplicated successfully",
+                "result": ChatSessionDetailSerializer(new_session).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
