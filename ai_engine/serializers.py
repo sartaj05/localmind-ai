@@ -52,6 +52,7 @@ class ChatSessionSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "model_name",
+            "is_pinned",
             "message_count",
             "created_at",
             "updated_at",
@@ -59,7 +60,6 @@ class ChatSessionSerializer(serializers.ModelSerializer):
 
     def get_message_count(self, obj):
         return obj.messages.count()
-
 
 class ChatSessionDetailSerializer(serializers.ModelSerializer):
     messages = ChatMessageSerializer(many=True, read_only=True)
@@ -70,6 +70,7 @@ class ChatSessionDetailSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "model_name",
+            "is_pinned",
             "messages",
             "created_at",
             "updated_at",

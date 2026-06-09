@@ -1322,3 +1322,27 @@ class KnowledgeBaseStatusView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+        
+class TogglePinChatSessionView(APIView):
+    def patch(self, request, pk):
+        try:
+            session = ChatSession.objects.get(pk=pk, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        session.is_pinned = not session.is_pinned
+        session.save(update_fields=["is_pinned", "updated_at"])
+
+        return Response(
+            {
+                "success": True,
+                "message": "Chat session pin status updated successfully",
+                "is_pinned": session.is_pinned,
+                "result": ChatSessionSerializer(session).data,
+            },
+            status=status.HTTP_200_OK,
+        )

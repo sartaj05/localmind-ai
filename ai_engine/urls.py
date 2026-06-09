@@ -27,6 +27,7 @@ from .views import (
     ExportChatSessionTXTView,
     ExportChatSessionJSONView,
     KnowledgeBaseStatusView,
+    TogglePinChatSessionView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -106,6 +107,11 @@ urlpatterns = [
         "rag/status/",
         KnowledgeBaseStatusView.as_view(),
         name="rag-status",
+    ),
+    path(
+        "sessions/<int:pk>/toggle-pin/",
+        TogglePinChatSessionView.as_view(),
+        name="toggle-pin-chat-session",
     ),
     
 ]
