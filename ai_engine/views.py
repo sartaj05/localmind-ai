@@ -527,20 +527,37 @@ class KnowledgeDocumentDetailView(APIView):
             )
 
         title = request.data.get("title")
+        new_file = request.FILES.get("file")
 
-        if not title:
+        allowed_extensions = [".txt", ".pdf"]
+
+        if new_file and not any(
+            new_file.name.lower().endswith(ext) for ext in allowed_extensions
+        ):
             return Response(
-                {"success": False, "error": "Title is required"},
+                {"success": False, "error": "Only TXT and PDF files are allowed"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        document.title = title
-        document.save(update_fields=["title"])
+        if title:
+            document.title = title
+
+        if new_file:
+            document.file.delete(save=False)
+            document.file = new_file
+
+        if not title and not new_file:
+            return Response(
+                {"success": False, "error": "Title or file is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        document.save()
 
         return Response(
             {
                 "success": True,
-                "message": "Document renamed successfully. Rebuild knowledge base after renaming.",
+                "message": "Document updated successfully. Rebuild knowledge base after updating.",
                 "result": KnowledgeDocumentSerializer(document).data,
             },
             status=status.HTTP_200_OK,
