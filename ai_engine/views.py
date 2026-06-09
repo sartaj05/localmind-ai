@@ -161,7 +161,12 @@ class AIChatHistoryDetailView(APIView):
 class ChatSessionListCreateView(APIView):
     def get(self, request):
         search = request.query_params.get("search", "")
-        sessions = ChatSession.objects.filter(user=request.user)
+        show_archived = request.query_params.get("archived", "false").lower() == "true"
+
+        sessions = ChatSession.objects.filter(
+            user=request.user,
+            is_archived=show_archived,
+        )
 
         if search:
             sessions = sessions.filter(title__icontains=search)
@@ -1342,6 +1347,30 @@ class TogglePinChatSessionView(APIView):
                 "success": True,
                 "message": "Chat session pin status updated successfully",
                 "is_pinned": session.is_pinned,
+                "result": ChatSessionSerializer(session).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+        
+        
+class ToggleArchiveChatSessionView(APIView):
+    def patch(self, request, pk):
+        try:
+            session = ChatSession.objects.get(pk=pk, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        session.is_archived = not session.is_archived
+        session.save(update_fields=["is_archived", "updated_at"])
+
+        return Response(
+            {
+                "success": True,
+                "message": "Chat session archive status updated successfully",
+                "is_archived": session.is_archived,
                 "result": ChatSessionSerializer(session).data,
             },
             status=status.HTTP_200_OK,

@@ -54,6 +54,7 @@ class ChatSessionSerializer(serializers.ModelSerializer):
             "model_name",
             "is_pinned",
             "message_count",
+            "is_archived",
             "created_at",
             "updated_at",
         ]
@@ -71,6 +72,7 @@ class ChatSessionDetailSerializer(serializers.ModelSerializer):
             "title",
             "model_name",
             "is_pinned",
+            "is_archived",
             "messages",
             "created_at",
             "updated_at",

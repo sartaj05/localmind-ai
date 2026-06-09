@@ -28,6 +28,7 @@ from .views import (
     ExportChatSessionJSONView,
     KnowledgeBaseStatusView,
     TogglePinChatSessionView,
+    ToggleArchiveChatSessionView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -112,6 +113,11 @@ urlpatterns = [
         "sessions/<int:pk>/toggle-pin/",
         TogglePinChatSessionView.as_view(),
         name="toggle-pin-chat-session",
+    ),
+    path(
+        "sessions/<int:pk>/toggle-archive/",
+        ToggleArchiveChatSessionView.as_view(),
+        name="toggle-archive-chat-session",
     ),
     
 ]
