@@ -516,8 +516,36 @@ class KnowledgeDocumentListCreateView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
-
 class KnowledgeDocumentDetailView(APIView):
+    def patch(self, request, pk):
+        try:
+            document = KnowledgeDocument.objects.get(pk=pk, user=request.user)
+        except KnowledgeDocument.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Document not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        title = request.data.get("title")
+
+        if not title:
+            return Response(
+                {"success": False, "error": "Title is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        document.title = title
+        document.save(update_fields=["title"])
+
+        return Response(
+            {
+                "success": True,
+                "message": "Document renamed successfully. Rebuild knowledge base after renaming.",
+                "result": KnowledgeDocumentSerializer(document).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
     def delete(self, request, pk):
         try:
             document = KnowledgeDocument.objects.get(pk=pk, user=request.user)
@@ -534,10 +562,9 @@ class KnowledgeDocumentDetailView(APIView):
             {
                 "success": True,
                 "message": "Document deleted successfully. Rebuild knowledge base after deleting.",
-            }
+            },
+            status=status.HTTP_200_OK,
         )
-
-
 class SendSessionRAGMessageView(APIView):
     def post(self, request, pk):
         started_at = now_ms()
