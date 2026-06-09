@@ -35,6 +35,7 @@ from .views import (
     StreamSessionMessageView,
     ChatSessionStatsView,
     DuplicateChatSessionView,
+    SearchChatSessionMessagesView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -155,5 +156,9 @@ urlpatterns = [
         DuplicateChatSessionView.as_view(),
         name="duplicate-chat-session",
     ),
-    
+    path(
+        "sessions/<int:pk>/search-messages/",
+        SearchChatSessionMessagesView.as_view(),
+        name="search-chat-session-messages",
+    ),
 ]

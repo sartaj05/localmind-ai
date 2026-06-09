@@ -1698,3 +1698,44 @@ class DuplicateChatSessionView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+        
+class SearchChatSessionMessagesView(APIView):
+    def get(self, request, pk):
+        query = request.query_params.get("q", "")
+
+        if not query:
+            return Response(
+                {
+                    "success": False,
+                    "error": "Search query is required. Use ?q=your_text",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        messages = session.messages.filter(content__icontains=query)
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(messages, request)
+
+        serializer = ChatMessageSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
+            {
+                "success": True,
+                "query": query,
+                "session_id": session.id,
+                "results": serializer.data,
+            }
+        )
