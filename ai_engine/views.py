@@ -166,6 +166,7 @@ class ChatSessionListCreateView(APIView):
         sessions = ChatSession.objects.filter(
             user=request.user,
             is_archived=show_archived,
+            is_deleted=False,
         )
 
         if search:
@@ -178,7 +179,6 @@ class ChatSessionListCreateView(APIView):
         return paginator.get_paginated_response(
             {"success": True, "results": serializer.data}
         )
-
     def post(self, request):
         serializer = CreateChatSessionSerializer(data=request.data)
 
@@ -264,9 +264,15 @@ class ChatSessionDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        session.delete()
-        return Response({"success": True, "message": "Chat session deleted successfully"})
+        session.soft_delete()
 
+        return Response(
+            {
+                "success": True,
+                "message": "Chat session moved to trash successfully",
+            },
+            status=status.HTTP_200_OK,
+        )
 
 class SendSessionMessageView(APIView):
     def post(self, request, pk):
@@ -1372,6 +1378,77 @@ class ToggleArchiveChatSessionView(APIView):
                 "message": "Chat session archive status updated successfully",
                 "is_archived": session.is_archived,
                 "result": ChatSessionSerializer(session).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+        
+class TrashChatSessionListView(APIView):
+    def get(self, request):
+        search = request.query_params.get("search", "")
+
+        sessions = ChatSession.objects.filter(
+            user=request.user,
+            is_deleted=True,
+        )
+
+        if search:
+            sessions = sessions.filter(title__icontains=search)
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(sessions, request)
+        serializer = ChatSessionSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
+            {"success": True, "results": serializer.data}
+        )
+
+
+class RestoreChatSessionView(APIView):
+    def patch(self, request, pk):
+        try:
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=True,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Deleted chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        session.restore()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Chat session restored successfully",
+                "result": ChatSessionSerializer(session).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class PermanentDeleteChatSessionView(APIView):
+    def delete(self, request, pk):
+        try:
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=True,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Deleted chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        session.delete()
+
+        return Response(
+            {
+                "success": True,
+                "message": "Chat session permanently deleted successfully",
             },
             status=status.HTTP_200_OK,
         )

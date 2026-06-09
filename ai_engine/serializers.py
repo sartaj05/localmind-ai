@@ -53,8 +53,10 @@ class ChatSessionSerializer(serializers.ModelSerializer):
             "title",
             "model_name",
             "is_pinned",
-            "message_count",
             "is_archived",
+            "is_deleted",
+            "deleted_at",
+            "message_count",
             "created_at",
             "updated_at",
         ]
@@ -73,11 +75,12 @@ class ChatSessionDetailSerializer(serializers.ModelSerializer):
             "model_name",
             "is_pinned",
             "is_archived",
+            "is_deleted",
+            "deleted_at",
             "messages",
             "created_at",
             "updated_at",
         ]
-
 
 class CreateChatSessionSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, allow_blank=True)

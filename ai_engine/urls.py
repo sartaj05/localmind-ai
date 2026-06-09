@@ -29,6 +29,9 @@ from .views import (
     KnowledgeBaseStatusView,
     TogglePinChatSessionView,
     ToggleArchiveChatSessionView,
+    TrashChatSessionListView,
+    RestoreChatSessionView,
+    PermanentDeleteChatSessionView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -118,6 +121,21 @@ urlpatterns = [
         "sessions/<int:pk>/toggle-archive/",
         ToggleArchiveChatSessionView.as_view(),
         name="toggle-archive-chat-session",
+    ),
+    path(
+        "sessions/trash/",
+        TrashChatSessionListView.as_view(),
+        name="trash-chat-sessions",
+    ),
+    path(
+        "sessions/<int:pk>/restore/",
+        RestoreChatSessionView.as_view(),
+        name="restore-chat-session",
+    ),
+    path(
+        "sessions/<int:pk>/permanent-delete/",
+        PermanentDeleteChatSessionView.as_view(),
+        name="permanent-delete-chat-session",
     ),
     
 ]
