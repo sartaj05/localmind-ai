@@ -5,6 +5,7 @@ from .views import (
     AIChatHistoryListView,
     AIChatHistoryDetailView,
     BulkPermanentDeleteChatSessionsView,
+    BulkPinChatSessionsView,
     ChatSessionListCreateView,
     ChatSessionDetailView,
     EmptyTrashChatSessionsView,
@@ -208,5 +209,10 @@ urlpatterns = [
         "sessions/trash/empty/",
         EmptyTrashChatSessionsView.as_view(),
         name="empty-trash-chat-sessions",
+    ),
+    path(
+        "sessions/bulk-pin/",
+        BulkPinChatSessionsView.as_view(),
+        name="bulk-pin-chat-sessions",
     ),
 ]

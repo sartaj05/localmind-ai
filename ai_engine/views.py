@@ -2004,3 +2004,35 @@ class EmptyTrashChatSessionsView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class BulkPinChatSessionsView(APIView):
+    def post(self, request):
+        serializer = BulkSessionIdsSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session_ids = serializer.validated_data["session_ids"]
+        is_pinned = request.data.get("is_pinned", True)
+
+        sessions = ChatSession.objects.filter(
+            id__in=session_ids,
+            user=request.user,
+            is_deleted=False,
+        )
+
+        updated_count = sessions.update(is_pinned=is_pinned)
+
+        return Response(
+            {
+                "success": True,
+                "message": "Selected chat sessions pin status updated successfully",
+                "requested_count": len(session_ids),
+                "updated_count": updated_count,
+                "is_pinned": is_pinned,
+            },
+            status=status.HTTP_200_OK,
+        )
