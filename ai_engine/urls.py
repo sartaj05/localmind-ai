@@ -32,6 +32,7 @@ from .views import (
     TrashChatSessionListView,
     RestoreChatSessionView,
     PermanentDeleteChatSessionView,
+    StreamSessionMessageView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -136,6 +137,11 @@ urlpatterns = [
         "sessions/<int:pk>/permanent-delete/",
         PermanentDeleteChatSessionView.as_view(),
         name="permanent-delete-chat-session",
+    ),
+    path(
+        "sessions/<int:pk>/stream-message/",
+        StreamSessionMessageView.as_view(),
+        name="stream-session-message",
     ),
     
 ]

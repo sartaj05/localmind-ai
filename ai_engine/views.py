@@ -1483,3 +1483,127 @@ class PermanentDeleteChatSessionView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class StreamSessionMessageView(APIView):
+    def get(self, request, pk):
+        return Response(
+            {
+                "success": True,
+                "message": "This endpoint supports POST streaming only.",
+                "method": "POST",
+                "url": f"/api/ai/sessions/{pk}/stream-message/",
+                "example_body": {
+                    "message": "Explain Django ORM in simple words",
+                    "model": "phi3",
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request, pk):
+        started_at = now_ms()
+
+        try:
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = SendSessionMessageSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_message = serializer.validated_data["message"]
+        model = serializer.validated_data.get("model") or session.model_name
+
+        try:
+            context_prompt = build_context_prompt(
+                messages=session.messages,
+                new_message=user_message,
+            )
+
+            ChatMessage.objects.create(
+                session=session,
+                role="user",
+                content=user_message,
+            )
+
+            def response_generator():
+                full_answer = ""
+
+                try:
+                    for token in stream_ollama_response(
+                        prompt=context_prompt,
+                        model=model,
+                    ):
+                        full_answer += token
+                        yield token
+
+                    ChatMessage.objects.create(
+                        session=session,
+                        role="assistant",
+                        content=full_answer,
+                    )
+
+                    session.model_name = model
+
+                    if session.title == "New Chat":
+                        session.title = generate_chat_title(
+                            user_message=user_message,
+                            model=model,
+                        )
+
+                    session.save(update_fields=["model_name", "title", "updated_at"])
+
+                    create_usage_log(
+                        user=request.user,
+                        endpoint=f"/api/ai/sessions/{pk}/stream-message/",
+                        model_name=model,
+                        prompt=user_message,
+                        success=True,
+                        started_at_ms=started_at,
+                    )
+
+                except Exception as error:
+                    create_usage_log(
+                        user=request.user,
+                        endpoint=f"/api/ai/sessions/{pk}/stream-message/",
+                        model_name=model,
+                        prompt=user_message,
+                        success=False,
+                        error_message=str(error),
+                        started_at_ms=started_at,
+                    )
+
+                    yield f"\n[ERROR] {str(error)}"
+
+            return StreamingHttpResponse(
+                response_generator(),
+                content_type="text/plain",
+            )
+
+        except Exception as error:
+            create_usage_log(
+                user=request.user,
+                endpoint=f"/api/ai/sessions/{pk}/stream-message/",
+                model_name=model,
+                prompt=user_message,
+                success=False,
+                error_message=str(error),
+                started_at_ms=started_at,
+            )
+
+            return Response(
+                {"success": False, "error": str(error)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
