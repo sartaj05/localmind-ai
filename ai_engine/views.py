@@ -1778,3 +1778,28 @@ class ToggleImportantChatMessageView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+        
+class ImportantChatMessagesListView(APIView):
+    def get(self, request):
+        search = request.query_params.get("search", "")
+
+        messages = ChatMessage.objects.filter(
+            session__user=request.user,
+            session__is_deleted=False,
+            is_important=True,
+        )
+
+        if search:
+            messages = messages.filter(content__icontains=search)
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(messages, request)
+
+        serializer = ChatMessageSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
+            {
+                "success": True,
+                "results": serializer.data,
+            }
+        )
