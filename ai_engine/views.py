@@ -919,6 +919,48 @@ class ClearAIUsageLogsView(APIView):
         )
         
 class ChatMessageDetailView(APIView):
+    def patch(self, request, session_pk, message_pk):
+        try:
+            session = ChatSession.objects.get(pk=session_pk, user=request.user)
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            message = ChatMessage.objects.get(pk=message_pk, session=session)
+        except ChatMessage.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat message not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        content = request.data.get("content")
+
+        if not content:
+            return Response(
+                {"success": False, "error": "Content is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        message.content = content
+        message.save(update_fields=["content"])
+
+        return Response(
+            {
+                "success": True,
+                "message": "Chat message updated successfully",
+                "result": {
+                    "id": message.id,
+                    "role": message.role,
+                    "content": message.content,
+                    "created_at": message.created_at,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
     def delete(self, request, session_pk, message_pk):
         try:
             session = ChatSession.objects.get(pk=session_pk, user=request.user)
