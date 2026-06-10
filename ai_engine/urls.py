@@ -17,6 +17,7 @@ from .views import (
     ChatSessionTagListCreateView,
     ChatSessionsByTagView,
     CopyChatMessagesView,
+    DeleteDocumentVectorOnlyView,
     DocumentChunksPreviewView,
     EmptyTrashChatSessionsView,
     MergeChatSessionsView,
@@ -28,6 +29,7 @@ from .views import (
     KnowledgeDocumentListCreateView,
     KnowledgeDocumentDetailView,
     SendSessionRAGMessageView,
+    StreamSessionMessageSSEView,
     StreamSessionRAGMessageView,
     LocalModelListView,
     AIHealthCheckView,
@@ -43,6 +45,7 @@ from .views import (
     ExportChatSessionTXTView,
     ExportChatSessionJSONView,
     KnowledgeBaseStatusView,
+    StreamSessionRAGSSEView,
     TogglePinChatSessionView,
     ToggleArchiveChatSessionView,
     TrashChatSessionListView,
@@ -58,6 +61,7 @@ from .views import (
     ChatSessionPreviewView,
     BulkSoftDeleteChatSessionsView,
     BulkRestoreChatSessionsView,
+    UserAIPreferenceView,
 )
 from .views import StreamAIView
 urlpatterns = [
@@ -260,4 +264,24 @@ urlpatterns = [
     path("rag/source-documents/<int:document_id>/", RAGSourceDocumentDetailView.as_view(), name="rag-source-document-detail"),
     path("documents/<int:document_id>/chunks/", DocumentChunksPreviewView.as_view(), name="document-chunks-preview"),
     path("documents/<int:document_id>/rebuild/", RebuildSingleDocumentView.as_view(), name="rebuild-single-document"),
+    path(
+        "documents/<int:document_id>/delete-vector/",
+        DeleteDocumentVectorOnlyView.as_view(),
+        name="delete-document-vector-only",
+    ),
+    path(
+        "sessions/<int:pk>/stream-message-sse/",
+        StreamSessionMessageSSEView.as_view(),
+        name="stream-session-message-sse",
+    ),
+    path(
+        "sessions/<int:pk>/rag-stream-sse/",
+        StreamSessionRAGSSEView.as_view(),
+        name="stream-session-rag-sse",
+    ),
+    path(
+        "preferences/",
+        UserAIPreferenceView.as_view(),
+        name="user-ai-preferences",
+    ),
 ]

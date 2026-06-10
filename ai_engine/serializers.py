@@ -7,6 +7,7 @@ from .models import (
     ChatMessage,
     ChatSessionTag,
     KnowledgeDocument,
+    UserAIPreference,
 )
 
 class ChatSessionTagSerializer(serializers.ModelSerializer):
@@ -165,4 +166,30 @@ class SessionTagAssignSerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         required=True,
         allow_empty=True,
+    )
+    
+    
+class UserAIPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserAIPreference
+        fields = [
+            "id",
+            "default_model",
+            "rag_top_k",
+            "show_sources",
+            "auto_generate_title",
+            "stream_format",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class UserAIPreferenceUpdateSerializer(serializers.Serializer):
+    default_model = serializers.CharField(required=False, allow_blank=True)
+    rag_top_k = serializers.IntegerField(required=False, min_value=1, max_value=20)
+    show_sources = serializers.BooleanField(required=False)
+    auto_generate_title = serializers.BooleanField(required=False)
+    stream_format = serializers.ChoiceField(
+        required=False,
+        choices=["plain", "sse"],
     )

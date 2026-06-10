@@ -1,6 +1,16 @@
 from django.conf import settings
 from django.http import StreamingHttpResponse, HttpResponse
+import json
 
+from .models import UserAIPreference
+from .serializers import (
+    UserAIPreferenceSerializer,
+    UserAIPreferenceUpdateSerializer,
+)
+from .rag_service import (
+    delete_document_from_vector_db,
+    search_knowledge_with_sources,
+)
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -62,7 +72,29 @@ from .services import (
 )
 
 
+def get_user_ai_preference(user):
+    preference, _ = UserAIPreference.objects.get_or_create(user=user)
+    return preference
 
+
+def get_selected_model(request, provided_model=None):
+    if provided_model:
+        return provided_model
+
+    preference = get_user_ai_preference(request.user)
+    return preference.default_model or settings.DEFAULT_AI_MODEL
+
+
+def get_selected_top_k(request, provided_top_k=None):
+    if provided_top_k:
+        return provided_top_k
+
+    preference = get_user_ai_preference(request.user)
+    return preference.rag_top_k or 3
+
+
+def sse_event(event, data):
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
 class AskAIView(APIView):
     def post(self, request):
         started_at = now_ms()
@@ -442,7 +474,7 @@ class AskRAGView(APIView):
         started_at = now_ms()
 
         question = request.data.get("question")
-        model = request.data.get("model") or settings.DEFAULT_AI_MODEL
+        model = get_selected_model(request, request.data.get("model"))
 
         if not question:
             return Response(
@@ -451,10 +483,27 @@ class AskRAGView(APIView):
             )
 
         try:
+            preference = get_user_ai_preference(request.user)
+            top_k = get_selected_top_k(request, request.data.get("top_k"))
+
             retrieval = search_knowledge_with_sources(
                 query=question,
                 user=request.user,
+                top_k=top_k,
             )
+
+            if not retrieval["has_context"]:
+                return Response(
+                    {
+                        "success": True,
+                        "question": question,
+                        "model": model,
+                        "has_context": False,
+                        "sources": [],
+                        "answer": "I do not have enough information in the uploaded knowledge base.",
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
             context = retrieval["context"]
             sources = retrieval["sources"]
@@ -490,8 +539,9 @@ Answer:
                     "success": True,
                     "question": question,
                     "model": model,
+                    "has_context": True,
                     "context": context,
-                    "sources": sources,
+                    "sources": sources if preference.show_sources else [],
                     "answer": answer,
                 },
                 status=status.HTTP_200_OK,
@@ -2453,4 +2503,347 @@ class RebuildSingleDocumentView(APIView):
                 "document": KnowledgeDocumentSerializer(document).data,
                 "total_chunks": total_chunks,
             }
+        )
+        
+class DeleteDocumentVectorOnlyView(APIView):
+    def delete(self, request, document_id):
+        try:
+            document = KnowledgeDocument.objects.get(
+                id=document_id,
+                user=request.user,
+            )
+        except KnowledgeDocument.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Document not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        deleted_chunks = delete_document_from_vector_db(
+            user=request.user,
+            document_id=document.id,
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Document removed from vector database only. Uploaded file still exists.",
+                "document_id": document.id,
+                "deleted_chunks": deleted_chunks,
+            },
+            status=status.HTTP_200_OK,
+        )
+        
+        
+class StreamSessionMessageSSEView(APIView):
+    def get(self, request, pk):
+        return Response(
+            {
+                "success": True,
+                "message": "Use POST for SSE streaming.",
+                "url": f"/api/ai/sessions/{pk}/stream-message-sse/",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request, pk):
+        started_at = now_ms()
+
+        try:
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = SendSessionMessageSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_message = serializer.validated_data["message"]
+        model = get_selected_model(
+            request,
+            serializer.validated_data.get("model"),
+        )
+
+        context_prompt = build_context_prompt(
+            messages=session.messages,
+            new_message=user_message,
+        )
+
+        ChatMessage.objects.create(
+            session=session,
+            role="user",
+            content=user_message,
+        )
+
+        def generator():
+            full_answer = ""
+
+            try:
+                yield sse_event("start", {"success": True, "model": model})
+
+                for token in stream_ollama_response(
+                    prompt=context_prompt,
+                    model=model,
+                ):
+                    full_answer += token
+                    yield sse_event("token", {"token": token})
+
+                assistant_message = ChatMessage.objects.create(
+                    session=session,
+                    role="assistant",
+                    content=full_answer,
+                )
+
+                session.model_name = model
+
+                preference = get_user_ai_preference(request.user)
+
+                if session.title == "New Chat" and preference.auto_generate_title:
+                    session.title = generate_chat_title(
+                        user_message=user_message,
+                        model=model,
+                    )
+
+                session.save(update_fields=["model_name", "title", "updated_at"])
+
+                create_usage_log(
+                    user=request.user,
+                    endpoint=f"/api/ai/sessions/{pk}/stream-message-sse/",
+                    model_name=model,
+                    prompt=user_message,
+                    success=True,
+                    started_at_ms=started_at,
+                )
+
+                yield sse_event(
+                    "done",
+                    {
+                        "success": True,
+                        "assistant_message_id": assistant_message.id,
+                    },
+                )
+
+            except Exception as error:
+                create_usage_log(
+                    user=request.user,
+                    endpoint=f"/api/ai/sessions/{pk}/stream-message-sse/",
+                    model_name=model,
+                    prompt=user_message,
+                    success=False,
+                    error_message=str(error),
+                    started_at_ms=started_at,
+                )
+
+                yield sse_event("error", {"error": str(error)})
+
+        response = StreamingHttpResponse(
+            generator(),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        return response
+    
+    
+class StreamSessionRAGSSEView(APIView):
+    def get(self, request, pk):
+        return Response(
+            {
+                "success": True,
+                "message": "Use POST for RAG SSE streaming.",
+                "url": f"/api/ai/sessions/{pk}/rag-stream-sse/",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request, pk):
+        started_at = now_ms()
+
+        try:
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
+        except ChatSession.DoesNotExist:
+            return Response(
+                {"success": False, "error": "Chat session not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = SendSessionRAGMessageSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_message = serializer.validated_data["message"]
+        model = get_selected_model(
+            request,
+            serializer.validated_data.get("model"),
+        )
+        top_k = get_selected_top_k(
+            request,
+            serializer.validated_data.get("top_k"),
+        )
+
+        retrieval = search_knowledge_with_sources(
+            query=user_message,
+            user=request.user,
+            top_k=top_k,
+        )
+
+        preference = get_user_ai_preference(request.user)
+
+        ChatMessage.objects.create(
+            session=session,
+            role="user",
+            content=user_message,
+        )
+
+        def generator():
+            full_answer = ""
+
+            try:
+                yield sse_event(
+                    "start",
+                    {
+                        "success": True,
+                        "model": model,
+                        "has_context": retrieval["has_context"],
+                    },
+                )
+
+                if preference.show_sources:
+                    yield sse_event("sources", {"sources": retrieval["sources"]})
+
+                if not retrieval["has_context"]:
+                    fallback_answer = "I do not have enough information in the uploaded knowledge base."
+
+                    ChatMessage.objects.create(
+                        session=session,
+                        role="assistant",
+                        content=fallback_answer,
+                    )
+
+                    yield sse_event("token", {"token": fallback_answer})
+                    yield sse_event("done", {"success": True})
+                    return
+
+                context_prompt = build_rag_context_prompt(
+                    messages=session.messages,
+                    new_message=user_message,
+                    rag_context=retrieval["context"],
+                )
+
+                for token in stream_ollama_response(
+                    prompt=context_prompt,
+                    model=model,
+                ):
+                    full_answer += token
+                    yield sse_event("token", {"token": token})
+
+                assistant_message = ChatMessage.objects.create(
+                    session=session,
+                    role="assistant",
+                    content=full_answer,
+                )
+
+                session.model_name = model
+
+                if session.title == "New Chat" and preference.auto_generate_title:
+                    session.title = generate_chat_title(
+                        user_message=user_message,
+                        model=model,
+                    )
+
+                session.save(update_fields=["model_name", "title", "updated_at"])
+
+                create_usage_log(
+                    user=request.user,
+                    endpoint=f"/api/ai/sessions/{pk}/rag-stream-sse/",
+                    model_name=model,
+                    prompt=user_message,
+                    success=True,
+                    started_at_ms=started_at,
+                )
+
+                yield sse_event(
+                    "done",
+                    {
+                        "success": True,
+                        "assistant_message_id": assistant_message.id,
+                    },
+                )
+
+            except Exception as error:
+                create_usage_log(
+                    user=request.user,
+                    endpoint=f"/api/ai/sessions/{pk}/rag-stream-sse/",
+                    model_name=model,
+                    prompt=user_message,
+                    success=False,
+                    error_message=str(error),
+                    started_at_ms=started_at,
+                )
+
+                yield sse_event("error", {"error": str(error)})
+
+        response = StreamingHttpResponse(
+            generator(),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        return response
+    
+class UserAIPreferenceView(APIView):
+    def get(self, request):
+        preference = get_user_ai_preference(request.user)
+
+        return Response(
+            {
+                "success": True,
+                "result": UserAIPreferenceSerializer(preference).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def patch(self, request):
+        preference = get_user_ai_preference(request.user)
+        serializer = UserAIPreferenceUpdateSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"success": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = serializer.validated_data
+
+        for field, value in data.items():
+            if field == "default_model" and not value:
+                continue
+
+            setattr(preference, field, value)
+
+        preference.save()
+
+        return Response(
+            {
+                "success": True,
+                "message": "AI preferences updated successfully",
+                "result": UserAIPreferenceSerializer(preference).data,
+            },
+            status=status.HTTP_200_OK,
         )

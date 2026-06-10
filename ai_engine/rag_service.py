@@ -283,3 +283,70 @@ def rebuild_single_document(user, document):
         chunk_count += 1
 
     return chunk_count
+
+
+def delete_document_from_vector_db(user, document_id):
+    existing = collection.get(
+        where={
+            "$and": [
+                {"user_id": user.id},
+                {"document_id": document_id},
+            ]
+        }
+    )
+
+    ids = existing.get("ids", []) if existing else []
+
+    if ids:
+        collection.delete(ids=ids)
+
+    return len(ids)
+
+
+def search_knowledge_with_sources(query, user, top_k=3):
+    model = get_embedding_model()
+
+    query_embedding = model.encode(query).tolist()
+
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k,
+        where={"user_id": user.id},
+    )
+
+    documents = results.get("documents", [[]])[0]
+    metadatas = results.get("metadatas", [[]])[0]
+
+    context_parts = []
+    sources = []
+
+    for index, document in enumerate(documents):
+        if not document or not document.strip():
+            continue
+
+        metadata = metadatas[index] if index < len(metadatas) else {}
+
+        source = metadata.get("source", "unknown")
+        document_id = metadata.get("document_id")
+        file_name = metadata.get("file_name", "unknown")
+
+        context_parts.append(
+            f"Source: {source}\nContent: {document}"
+        )
+
+        sources.append(
+            {
+                "document_id": document_id,
+                "source": source,
+                "file_name": file_name,
+                "chunk_preview": document[:200],
+            }
+        )
+
+    context = "\n\n".join(context_parts)
+
+    return {
+        "has_context": bool(context.strip()),
+        "context": context,
+        "sources": sources,
+    }

@@ -134,3 +134,28 @@ class AIUsageLog(models.Model):
     def __str__(self):
         return f"{self.user} - {self.endpoint} - {self.success}"
     
+    
+    
+class UserAIPreference(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ai_preference",
+    )
+    default_model = models.CharField(max_length=100, default="phi3")
+    rag_top_k = models.PositiveIntegerField(default=3)
+    show_sources = models.BooleanField(default=True)
+    auto_generate_title = models.BooleanField(default=True)
+    stream_format = models.CharField(
+        max_length=20,
+        default="sse",
+        choices=(
+            ("plain", "Plain Text"),
+            ("sse", "Server Sent Events"),
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user} AI Preferences"
