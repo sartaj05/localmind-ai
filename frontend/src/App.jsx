@@ -17,6 +17,7 @@ function App() {
   const [password, setPassword] = useState("");
 
   const [sessions, setSessions] = useState([]);
+  const [sessionSearch, setSessionSearch] = useState("");
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [prompt, setPrompt] = useState("");
@@ -255,6 +256,10 @@ function App() {
     showPopup("Logged out successfully", "success");
   };
 
+  const filteredSessions = sessions.filter((session) =>
+    session.title?.toLowerCase().includes(sessionSearch.toLowerCase())
+  );
+
   if (!isLoggedIn) {
     return (
       <>
@@ -348,43 +353,54 @@ function App() {
             + New Thought
           </button>
 
-          <div className="session-list">
-            {sessions.map((session) => (
-              <div
-                key={session.id}
-                className={`session-item ${
-                  activeSession?.id === session.id ? "active" : ""
-                }`}
-                onClick={() => openSession(session)}
-              >
-                <div>
-                  <strong>
-                    {session.is_pinned ? "📌 " : ""}
-                    {session.title}
-                  </strong>
-                  <span>{session.message_count || 0} messages</span>
-                </div>
+          <input
+            className="session-search"
+            placeholder="Search sessions..."
+            value={sessionSearch}
+            onChange={(e) => setSessionSearch(e.target.value)}
+          />
 
-                <div className="session-actions">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePin(session);
-                    }}
-                  >
-                    📌
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(session);
-                    }}
-                  >
-                    🗑
-                  </button>
+          <div className="session-list">
+            {filteredSessions.length === 0 ? (
+              <div className="session-empty">No sessions found</div>
+            ) : (
+              filteredSessions.map((session) => (
+                <div
+                  key={session.id}
+                  className={`session-item ${
+                    activeSession?.id === session.id ? "active" : ""
+                  }`}
+                  onClick={() => openSession(session)}
+                >
+                  <div>
+                    <strong>
+                      {session.is_pinned ? "📌 " : ""}
+                      {session.title}
+                    </strong>
+                    <span>{session.message_count || 0} messages</span>
+                  </div>
+
+                  <div className="session-actions">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePin(session);
+                      }}
+                    >
+                      📌
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(session);
+                      }}
+                    >
+                      🗑
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </aside>
 
