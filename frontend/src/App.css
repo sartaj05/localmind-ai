@@ -3,10 +3,14 @@
 }
 
 .auth-page,
-.dashboard-page {
+.dashboard-page,
+.workspace-page {
   min-height: 100vh;
   width: 100vw;
   font-family: Inter, Arial, sans-serif;
+}
+
+.auth-page {
   background:
     radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.25), transparent 28%),
     radial-gradient(circle at 80% 70%, rgba(6, 182, 212, 0.25), transparent 30%),
@@ -23,7 +27,6 @@
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
   background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.9);
   border-radius: 34px;
   overflow: hidden;
   box-shadow: 0 35px 100px rgba(15, 23, 42, 0.18);
@@ -86,13 +89,16 @@ input,
 textarea {
   width: 100%;
   padding: 15px 16px;
-  margin-top: 14px;
   border-radius: 16px;
   border: 1px solid #cbd5e1;
-  background: #ffffff;
+  background: white;
   color: #0f172a;
   font-size: 15px;
   outline: none;
+}
+
+.auth-card input {
+  margin-top: 14px;
 }
 
 input:focus,
@@ -102,21 +108,27 @@ textarea:focus {
 }
 
 button {
+  border: none;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.auth-card button,
+.new-chat-btn,
+.prompt-dock button {
   margin-top: 18px;
   padding: 14px 24px;
-  border: none;
   border-radius: 16px;
   background: linear-gradient(135deg, #4f46e5, #7c3aed);
   color: white;
-  font-weight: 800;
-  cursor: pointer;
   box-shadow: 0 18px 35px rgba(79, 70, 229, 0.3);
 }
 
 .secondary {
+  padding: 11px 16px;
+  border-radius: 14px;
   background: #eef2ff;
   color: #4338ca;
-  box-shadow: none;
 }
 
 .switch-text {
@@ -128,58 +140,6 @@ button {
   color: #4f46e5;
   font-weight: 800;
   cursor: pointer;
-}
-
-.chat-card {
-  width: 820px;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 36px;
-  border-radius: 30px;
-  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.16);
-}
-
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.topbar h1 {
-  margin: 0;
-  color: #0f172a;
-}
-
-textarea {
-  min-height: 160px;
-  resize: vertical;
-}
-
-.answer {
-  margin-top: 22px;
-  padding: 20px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
-  color: #1f2937;
-  line-height: 1.7;
-}
-
-@media (max-width: 800px) {
-  .auth-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .brand-panel {
-    padding: 36px;
-  }
-
-  .auth-card {
-    padding: 34px;
-  }
-
-  .brand-panel h1 {
-    font-size: 40px;
-  }
 }
 
 .popup-toast {
@@ -214,5 +174,246 @@ textarea {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+/* Workspace */
+.workspace-page {
+  display: grid;
+  grid-template-columns: 330px 1fr;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.18), transparent 28%),
+    radial-gradient(circle at 90% 90%, rgba(6, 182, 212, 0.18), transparent 28%),
+    #f8fafc;
+}
+
+.session-sidebar {
+  background: #0f172a;
+  color: white;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  transition: 0.25s ease;
+}
+
+.session-sidebar.closed {
+  display: none;
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.side-head h2 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.side-head p {
+  margin: 4px 0 0;
+  color: #94a3b8;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: #1e293b;
+  color: white;
+  font-size: 20px;
+}
+
+.new-chat-btn {
+  width: 100%;
+}
+
+.session-list {
+  margin-top: 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-item {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.session-item.active {
+  background: linear-gradient(135deg, #4f46e5, #0891b2);
+}
+
+.session-item strong {
+  display: block;
+  font-size: 14px;
+}
+
+.session-item span {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.session-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.session-actions button {
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  border-radius: 10px;
+  height: 30px;
+}
+
+.mind-main {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 28px;
+}
+
+.mind-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.75);
+  padding: 22px;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+}
+
+.mind-header h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 34px;
+}
+
+.mind-header p {
+  margin: 6px 0 0;
+  color: #64748b;
+}
+
+.thought-board {
+  margin: 24px 0;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.empty-state {
+  height: 100%;
+  min-height: 440px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.75), rgba(236, 254, 255, 0.75));
+  text-align: center;
+}
+
+.orb {
+  width: 90px;
+  height: 90px;
+  border-radius: 30px;
+  background: linear-gradient(135deg, #4f46e5, #06b6d4);
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  font-weight: 900;
+  box-shadow: 0 24px 50px rgba(79, 70, 229, 0.35);
+}
+
+.empty-state h2 {
+  margin-bottom: 8px;
+  color: #0f172a;
+}
+
+.empty-state p {
+  max-width: 520px;
+  color: #64748b;
+}
+
+.message-card {
+  max-width: 760px;
+  padding: 18px;
+  border-radius: 22px;
+  margin-bottom: 16px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
+
+.message-card span {
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.message-card.user {
+  margin-left: auto;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: white;
+}
+
+.message-card.assistant {
+  background: white;
+  color: #0f172a;
+}
+
+.message-card p {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.prompt-dock {
+  display: grid;
+  grid-template-columns: 1fr 120px;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 18px;
+  border-radius: 26px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+}
+
+.prompt-dock textarea {
+  min-height: 64px;
+  max-height: 160px;
+  resize: vertical;
+}
+
+.prompt-dock button {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .workspace-page {
+    grid-template-columns: 1fr;
+  }
+
+  .session-sidebar {
+    position: fixed;
+    z-index: 50;
+    height: 100vh;
+    width: 320px;
+  }
+
+  .auth-shell {
+    grid-template-columns: 1fr;
   }
 }
