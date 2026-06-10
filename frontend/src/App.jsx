@@ -282,7 +282,7 @@ function App() {
         </div>
       )}
 
-      <div className="workspace-page">
+      <div className={`workspace-page ${sidebarOpen ? "with-sidebar" : "no-sidebar"}`}>
         <aside className={`session-sidebar ${sidebarOpen ? "" : "closed"}`}>
           <div className="side-head">
             <div>
@@ -338,11 +338,11 @@ function App() {
           </div>
         </aside>
 
-        <main className="mind-main">
+        <main className={sidebarOpen ? "mind-main" : "mind-main expanded"}>
           <header className="mind-header">
             {!sidebarOpen && (
-              <button className="secondary" onClick={() => setSidebarOpen(true)}>
-                Sessions
+              <button className="session-open-btn" onClick={() => setSidebarOpen(true)}>
+                ☰ Sessions
               </button>
             )}
 
