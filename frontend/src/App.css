@@ -803,3 +803,126 @@ textarea:focus {
     align-items: flex-start;
   }
 }
+.rag-ask-card {
+  margin-top: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e2e8f0;
+  border-radius: 28px;
+  padding: 26px;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
+}
+
+.rag-ask-card h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 28px;
+}
+
+.rag-ask-card p {
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.rag-ask-card textarea {
+  margin-top: 14px;
+  min-height: 110px;
+  resize: vertical;
+}
+
+.rag-ask-card button {
+  margin-top: 14px;
+  padding: 13px 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #4f46e5, #0891b2);
+  color: white;
+  box-shadow: 0 16px 35px rgba(79, 70, 229, 0.22);
+}
+
+.rag-answer-card {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 20px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.rag-answer-card h3,
+.rag-sources h3 {
+  margin-top: 0;
+  color: #0f172a;
+}
+
+.rag-answer-card p {
+  white-space: pre-wrap;
+  color: #334155;
+}
+
+.rag-sources {
+  margin-top: 18px;
+}
+
+.rag-source-card {
+  padding: 15px;
+  border-radius: 18px;
+  background: #eef2ff;
+  border: 1px solid #dbeafe;
+  margin-top: 10px;
+}
+
+.rag-source-card strong {
+  color: #3730a3;
+}
+
+.rag-source-card p {
+  margin-bottom: 0;
+  color: #475569;
+}
+.rag-ask-card {
+  margin-top: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e2e8f0;
+  border-radius: 28px;
+  padding: 26px;
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
+}
+
+.rag-ask-card h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 28px;
+}
+
+.rag-ask-card p {
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.rag-ask-card textarea {
+  margin-top: 14px;
+  min-height: 110px;
+  resize: vertical;
+}
+
+.rag-ask-card button {
+  margin-top: 14px;
+  padding: 13px 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #4f46e5, #0891b2);
+  color: white;
+  box-shadow: 0 16px 35px rgba(79, 70, 229, 0.22);
+}
+
+.rag-answer-card,
+.rag-source-card {
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.rag-answer-card p,
+.rag-source-card p {
+  white-space: pre-wrap;
+  color: #334155;
+}

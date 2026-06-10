@@ -18,6 +18,7 @@ import {
   deleteKnowledgeDocument,
   rebuildKnowledgeDocument,
   getDocumentChunks,
+  askRAG,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -42,6 +43,10 @@ function App() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const [documentChunks, setDocumentChunks] = useState([]);
+  const [ragQuestion, setRagQuestion] = useState("");
+  const [ragAnswer, setRagAnswer] = useState("");
+  const [ragSources, setRagSources] = useState([]);
+  const [askingRag, setAskingRag] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
 
   const [loading, setLoading] = useState(false);
@@ -54,7 +59,7 @@ function App() {
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState(
-    Boolean(localStorage.getItem("access_token"))
+    Boolean(localStorage.getItem("access_token")),
   );
 
   const showPopup = (message, type = "success") => {
@@ -132,7 +137,7 @@ function App() {
       if (!savedSessionId) return;
 
       const foundSession = list.find(
-        (session) => String(session.id) === String(savedSessionId)
+        (session) => String(session.id) === String(savedSessionId),
       );
 
       if (foundSession) await openSession(foundSession);
@@ -153,9 +158,7 @@ function App() {
         res.data.data?.access;
 
       const refresh =
-        res.data.refresh ||
-        res.data.tokens?.refresh ||
-        res.data.data?.refresh;
+        res.data.refresh || res.data.tokens?.refresh || res.data.data?.refresh;
 
       if (!access) {
         showPopup("Login success but token not found", "error");
@@ -168,7 +171,10 @@ function App() {
       setIsLoggedIn(true);
       showPopup("Login successful", "success");
     } catch (error) {
-      showPopup(error.response?.data?.error?.message || "Login failed", "error");
+      showPopup(
+        error.response?.data?.error?.message || "Login failed",
+        "error",
+      );
     }
   };
 
@@ -179,7 +185,10 @@ function App() {
       setMode("login");
       setPassword("");
     } catch (error) {
-      showPopup(error.response?.data?.error?.message || "Register failed", "error");
+      showPopup(
+        error.response?.data?.error?.message || "Register failed",
+        "error",
+      );
     }
   };
 
@@ -255,7 +264,10 @@ function App() {
       setMessages(detail?.messages || []);
       localStorage.setItem("active_session_id", String(session.id));
     } catch (error) {
-      showPopup(error.response?.data?.error?.message || "Message failed", "error");
+      showPopup(
+        error.response?.data?.error?.message || "Message failed",
+        "error",
+      );
     } finally {
       setLoading(false);
     }
@@ -282,7 +294,10 @@ function App() {
       }
 
       await loadSessions(sessionView);
-      showPopup(sessionView === "archive" ? "Session unarchived" : "Session archived", "success");
+      showPopup(
+        sessionView === "archive" ? "Session unarchived" : "Session archived",
+        "success",
+      );
     } catch {
       showPopup("Archive failed", "error");
     }
@@ -387,7 +402,10 @@ function App() {
       await loadDocuments();
       showPopup("Documents uploaded successfully", "success");
     } catch (error) {
-      showPopup(error.response?.data?.error?.message || "Document upload failed", "error");
+      showPopup(
+        error.response?.data?.error?.message || "Document upload failed",
+        "error",
+      );
     } finally {
       setUploadingDocs(false);
     }
@@ -427,6 +445,36 @@ function App() {
     }
   };
 
+  const handleAskKnowledge = async () => {
+    if (!ragQuestion.trim()) {
+      showPopup("Please enter a knowledge question", "error");
+      return;
+    }
+
+    setAskingRag(true);
+    setRagAnswer("");
+    setRagSources([]);
+
+    try {
+      const res = await askRAG({
+        question: ragQuestion,
+        top_k: 5,
+      });
+
+      setRagAnswer(res.data.answer || "");
+      setRagSources(res.data.sources || []);
+
+      showPopup("Knowledge answer generated", "success");
+    } catch (error) {
+      showPopup(
+        error.response?.data?.error?.message || "Knowledge ask failed",
+        "error",
+      );
+    } finally {
+      setAskingRag(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
@@ -438,11 +486,11 @@ function App() {
   };
 
   const filteredSessions = sessions.filter((session) =>
-    session.title?.toLowerCase().includes(sessionSearch.toLowerCase())
+    session.title?.toLowerCase().includes(sessionSearch.toLowerCase()),
   );
 
   const filteredDocuments = documents.filter((doc) =>
-    doc.title?.toLowerCase().includes(documentSearch.toLowerCase())
+    doc.title?.toLowerCase().includes(documentSearch.toLowerCase()),
   );
 
   if (!isLoggedIn) {
@@ -471,13 +519,27 @@ function App() {
                   : "Register using username, email, and password."}
               </p>
 
-              <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
+              <input
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
 
               {mode === "register" && (
-                <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
               )}
 
-              <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
 
               <button onClick={mode === "login" ? handleLogin : handleRegister}>
                 {mode === "login" ? "Login" : "Register"}
@@ -509,12 +571,16 @@ function App() {
         </div>
       )}
 
-      <div className={`workspace-page ${sidebarOpen ? "with-sidebar" : "no-sidebar"}`}>
+      <div
+        className={`workspace-page ${sidebarOpen ? "with-sidebar" : "no-sidebar"}`}
+      >
         <aside className={`session-sidebar ${sidebarOpen ? "" : "closed"}`}>
           <div className="side-head">
             <div>
               <h2>MindSpace</h2>
-              <p>{activePanel === "chat" ? "Session galaxy" : "Knowledge vault"}</p>
+              <p>
+                {activePanel === "chat" ? "Session galaxy" : "Knowledge vault"}
+              </p>
             </div>
 
             <button className="icon-btn" onClick={() => setSidebarOpen(false)}>
@@ -552,13 +618,22 @@ function App() {
               />
 
               <div className="session-tabs">
-                <button className={sessionView === "active" ? "active" : ""} onClick={() => handleChangeSessionView("active")}>
+                <button
+                  className={sessionView === "active" ? "active" : ""}
+                  onClick={() => handleChangeSessionView("active")}
+                >
                   Active
                 </button>
-                <button className={sessionView === "archive" ? "active" : ""} onClick={() => handleChangeSessionView("archive")}>
+                <button
+                  className={sessionView === "archive" ? "active" : ""}
+                  onClick={() => handleChangeSessionView("archive")}
+                >
                   Archive
                 </button>
-                <button className={sessionView === "trash" ? "active" : ""} onClick={() => handleChangeSessionView("trash")}>
+                <button
+                  className={sessionView === "trash" ? "active" : ""}
+                  onClick={() => handleChangeSessionView("trash")}
+                >
                   Trash
                 </button>
               </div>
@@ -580,22 +655,67 @@ function App() {
                       onClick={() => openSession(session)}
                     >
                       <div>
-                        <strong>{session.is_pinned ? "📌 " : ""}{session.title}</strong>
+                        <strong>
+                          {session.is_pinned ? "📌 " : ""}
+                          {session.title}
+                        </strong>
                         <span>{session.message_count || 0} messages</span>
                       </div>
 
                       <div className="session-actions">
                         {sessionView !== "trash" ? (
                           <>
-                            <button onClick={(e) => { e.stopPropagation(); handleRename(session); }}>✏️</button>
-                            <button onClick={(e) => { e.stopPropagation(); handlePin(session); }}>📌</button>
-                            <button onClick={(e) => { e.stopPropagation(); handleArchive(session); }}>📦</button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDelete(session); }}>🗑</button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRename(session);
+                              }}
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePin(session);
+                              }}
+                            >
+                              📌
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleArchive(session);
+                              }}
+                            >
+                              📦
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(session);
+                              }}
+                            >
+                              🗑
+                            </button>
                           </>
                         ) : (
                           <>
-                            <button onClick={(e) => { e.stopPropagation(); handleRestore(session); }}>♻️</button>
-                            <button onClick={(e) => { e.stopPropagation(); handlePermanentDelete(session); }}>❌</button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRestore(session);
+                              }}
+                            >
+                              ♻️
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePermanentDelete(session);
+                              }}
+                            >
+                              ❌
+                            </button>
                           </>
                         )}
                       </div>
@@ -616,7 +736,10 @@ function App() {
         <main className={sidebarOpen ? "mind-main" : "mind-main expanded"}>
           <header className="mind-header">
             {!sidebarOpen && (
-              <button className="session-open-btn" onClick={() => setSidebarOpen(true)}>
+              <button
+                className="session-open-btn"
+                onClick={() => setSidebarOpen(true)}
+              >
                 ☰ Menu
               </button>
             )}
@@ -646,7 +769,10 @@ function App() {
                   <div className="empty-state">
                     <div className="orb">AI</div>
                     <h2>Start a focused thought session</h2>
-                    <p>Create a session or ask directly. Your local model will answer and the conversation will be saved.</p>
+                    <p>
+                      Create a session or ask directly. Your local model will
+                      answer and the conversation will be saved.
+                    </p>
                   </div>
                 ) : (
                   messages.map((msg) => (
@@ -680,11 +806,21 @@ function App() {
             <section className="knowledge-board">
               <div className="knowledge-upload-card">
                 <h2>Knowledge Base</h2>
-                <p>Upload PDF, DOCX, or TXT files for document-aware AI answers.</p>
+                <p>
+                  Upload PDF, DOCX, or TXT files for document-aware AI answers.
+                </p>
 
-                <input type="file" multiple accept=".pdf,.docx,.txt" onChange={handleFileChange} />
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.docx,.txt"
+                  onChange={handleFileChange}
+                />
 
-                <button onClick={handleUploadDocuments} disabled={uploadingDocs}>
+                <button
+                  onClick={handleUploadDocuments}
+                  disabled={uploadingDocs}
+                >
                   {uploadingDocs ? "Uploading..." : "Upload Files"}
                 </button>
 
@@ -692,6 +828,48 @@ function App() {
                   <div className="selected-files">
                     {selectedFiles.map((file) => (
                       <span key={file.name}>{file.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rag-ask-card">
+                <h2>Ask Knowledge</h2>
+                <p>Ask questions using your uploaded documents.</p>
+
+                <textarea
+                  placeholder="Ask from uploaded documents..."
+                  value={ragQuestion}
+                  onChange={(e) => setRagQuestion(e.target.value)}
+                />
+
+                <button onClick={handleAskKnowledge} disabled={askingRag}>
+                  {askingRag ? "Searching knowledge..." : "Ask Knowledge"}
+                </button>
+
+                {ragAnswer && (
+                  <div className="rag-answer-card">
+                    <h3>Answer</h3>
+                    <p>{ragAnswer}</p>
+                  </div>
+                )}
+
+                {ragSources.length > 0 && (
+                  <div className="rag-sources">
+                    <h3>Sources</h3>
+
+                    {ragSources.map((source, index) => (
+                      <div
+                        className="rag-source-card"
+                        key={`${source.document_id || "source"}-${index}`}
+                      >
+                        <strong>
+                          {source.source ||
+                            source.file_name ||
+                            "Unknown source"}
+                        </strong>
+                        <p>{source.chunk_preview || "No preview available"}</p>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -724,9 +902,18 @@ function App() {
                       </div>
 
                       <div className="document-actions">
-                        <button onClick={() => handlePreviewChunks(doc)}>Preview</button>
-                        <button onClick={() => handleRebuildDocument(doc)}>Rebuild</button>
-                        <button className="danger" onClick={() => handleDeleteDocument(doc)}>Delete</button>
+                        <button onClick={() => handlePreviewChunks(doc)}>
+                          Preview
+                        </button>
+                        <button onClick={() => handleRebuildDocument(doc)}>
+                          Rebuild
+                        </button>
+                        <button
+                          className="danger"
+                          onClick={() => handleDeleteDocument(doc)}
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
                   ))
@@ -737,7 +924,9 @@ function App() {
                 <div className="chunk-preview">
                   <div className="chunk-head">
                     <h2>Chunks: {previewDocument.title}</h2>
-                    <button onClick={() => setPreviewDocument(null)}>Close</button>
+                    <button onClick={() => setPreviewDocument(null)}>
+                      Close
+                    </button>
                   </div>
 
                   {documentChunks.length === 0 ? (
