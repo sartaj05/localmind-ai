@@ -42,21 +42,45 @@ function App() {
     }, 2600);
   };
 
+  const normalizeSessions = (res) => {
+    const data = res.data;
+
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
+
+    if (Array.isArray(data?.results?.results)) {
+      return data.results.results;
+    }
+
+    if (Array.isArray(data?.data?.results)) {
+      return data.data.results;
+    }
+
+    return [];
+  };
+
   const loadSessions = async () => {
     try {
       const res = await getSessions();
-      const list = res.data.results || res.data.results?.results || [];
-      setSessions(Array.isArray(list) ? list : []);
+      const list = normalizeSessions(res);
+      setSessions(list);
+      return list;
     } catch {
       showPopup("Failed to load sessions", "error");
+      return [];
     }
   };
 
   const openSession = async (session) => {
     try {
       setActiveSession(session);
+      localStorage.setItem("active_session_id", String(session.id));
+
       const res = await getSessionDetail(session.id);
       const detail = res.data.result;
+
+      setActiveSession(detail || session);
       setMessages(detail?.messages || []);
     } catch {
       showPopup("Failed to open session", "error");
@@ -64,9 +88,30 @@ function App() {
   };
 
   useEffect(() => {
-    if (isLoggedIn) {
-      loadSessions();
-    }
+    const restoreSession = async () => {
+      if (!isLoggedIn) return;
+
+      try {
+        const list = await loadSessions();
+        const savedSessionId = localStorage.getItem("active_session_id");
+
+        if (!savedSessionId) return;
+
+        const foundSession = list.find(
+          (session) => String(session.id) === String(savedSessionId)
+        );
+
+        if (foundSession) {
+          await openSession(foundSession);
+        } else {
+          localStorage.removeItem("active_session_id");
+        }
+      } catch {
+        showPopup("Failed to restore session", "error");
+      }
+    };
+
+    restoreSession();
   }, [isLoggedIn]);
 
   const handleLogin = async () => {
@@ -130,6 +175,7 @@ function App() {
         const res = await createSession({ title: "New Chat" });
         session = res.data.result;
         setActiveSession(session);
+        localStorage.setItem("active_session_id", String(session.id));
       }
 
       const userText = prompt;
@@ -144,23 +190,18 @@ function App() {
         },
       ]);
 
-      const res = await sendSessionMessage(session.id, {
+      await sendSessionMessage(session.id, {
         message: userText,
       });
 
-      const assistantMessage = res.data.assistant_message;
-
-      setMessages((prev) => [
-        ...prev.filter((msg) => !String(msg.id).startsWith("temp-user")),
-        {
-          id: `user-${Date.now()}`,
-          role: "user",
-          content: userText,
-        },
-        assistantMessage,
-      ]);
-
       await loadSessions();
+
+      const detailRes = await getSessionDetail(session.id);
+      const detail = detailRes.data.result;
+
+      setActiveSession(detail || session);
+      setMessages(detail?.messages || []);
+      localStorage.setItem("active_session_id", String(session.id));
     } catch (error) {
       showPopup(
         error.response?.data?.error?.message || "Message failed",
@@ -174,7 +215,13 @@ function App() {
   const handlePin = async (session) => {
     try {
       await togglePinSession(session.id);
-      await loadSessions();
+      const list = await loadSessions();
+
+      if (activeSession?.id === session.id) {
+        const updated = list.find((item) => item.id === session.id);
+        if (updated) setActiveSession(updated);
+      }
+
       showPopup("Session pin updated", "success");
     } catch {
       showPopup("Pin failed", "error");
@@ -188,6 +235,7 @@ function App() {
       if (activeSession?.id === session.id) {
         setActiveSession(null);
         setMessages([]);
+        localStorage.removeItem("active_session_id");
       }
 
       await loadSessions();
@@ -199,6 +247,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem("access_token");
+    localStorage.removeItem("active_session_id");
     setIsLoggedIn(false);
     setActiveSession(null);
     setMessages([]);
