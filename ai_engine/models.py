@@ -146,6 +146,8 @@ class UserAIPreference(models.Model):
     rag_top_k = models.PositiveIntegerField(default=3)
     show_sources = models.BooleanField(default=True)
     auto_generate_title = models.BooleanField(default=True)
+    daily_request_limit = models.PositiveIntegerField(default=100)
+    max_prompt_characters = models.PositiveIntegerField(default=8000)
     stream_format = models.CharField(
         max_length=20,
         default="sse",
@@ -159,3 +161,20 @@ class UserAIPreference(models.Model):
 
     def __str__(self):
         return f"{self.user} AI Preferences"
+    
+class DailyAIUsage(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="daily_ai_usage",
+    )
+    date = models.DateField()
+    request_count = models.PositiveIntegerField(default=0)
+    character_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = ["user", "date"]
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.user} - {self.date} - {self.request_count}"

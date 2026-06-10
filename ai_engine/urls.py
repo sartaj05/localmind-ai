@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    AIUsageEstimateView,
     AskAIView,
     AIChatHistoryListView,
     AIChatHistoryDetailView,
@@ -17,6 +18,7 @@ from .views import (
     ChatSessionTagListCreateView,
     ChatSessionsByTagView,
     CopyChatMessagesView,
+    DailyAIUsageView,
     DeleteDocumentVectorOnlyView,
     DocumentChunksPreviewView,
     EmptyTrashChatSessionsView,
@@ -283,5 +285,15 @@ urlpatterns = [
         "preferences/",
         UserAIPreferenceView.as_view(),
         name="user-ai-preferences",
+    ),
+    path(
+        "usage/estimate/",
+        AIUsageEstimateView.as_view(),
+        name="ai-usage-estimate",
+    ),
+    path(
+        "usage/daily/",
+        DailyAIUsageView.as_view(),
+        name="daily-ai-usage",
     ),
 ]

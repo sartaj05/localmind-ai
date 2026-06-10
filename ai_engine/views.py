@@ -1,77 +1,83 @@
 from django.conf import settings
-from django.http import StreamingHttpResponse, HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
+from django.db.models import Avg
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 import json
 
-from .models import UserAIPreference
-from .serializers import (
-    UserAIPreferenceSerializer,
-    UserAIPreferenceUpdateSerializer,
-)
-from .rag_service import (
-    delete_document_from_vector_db,
-    search_knowledge_with_sources,
-)
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.db.models import Avg
+from .logging_service import create_usage_log, now_ms
 from .models import (
     AIChatHistory,
-    ChatSession,
-    ChatMessage,
-    ChatSessionTag,
-    KnowledgeDocument,
     AIUsageLog,
+    ChatMessage,
+    ChatSession,
+    ChatSessionTag,
+    DailyAIUsage,
+    KnowledgeDocument,
+    UserAIPreference,
 )
+from .pagination import StandardResultsSetPagination
 from .rag_service import (
     build_knowledge_base,
+    delete_document_from_vector_db,
     get_document_chunks,
+    get_user_collection_stats,
     rebuild_single_document,
     search_knowledge,
-    get_user_collection_stats,
     search_knowledge_with_sources,
 )
 from .serializers import (
-    AskAIRequestSerializer,
     AIChatHistorySerializer,
+    AIUsageLogSerializer,
+    AskAIRequestSerializer,
     BulkMessageIdsSerializer,
     BulkSessionIdsSerializer,
     ChatMessageSerializer,
-    ChatSessionSerializer,
     ChatSessionDetailSerializer,
+    ChatSessionSerializer,
     ChatSessionTagSerializer,
     CopyMessagesSerializer,
     CreateChatSessionSerializer,
+    DailyAIUsageSerializer,
     KnowledgeDocumentSerializer,
     MergeSessionsSerializer,
     RenameChatSessionSerializer,
     SendSessionMessageSerializer,
     SendSessionRAGMessageSerializer,
-    AIUsageLogSerializer,
     SessionTagAssignSerializer,
+    UserAIPreferenceSerializer,
+    UserAIPreferenceUpdateSerializer,
 )
-from .pagination import StandardResultsSetPagination
 from .services import (
     ask_local_model,
     build_context_prompt,
     build_rag_context_prompt,
-    list_local_models,
-    check_ollama_health,
-)
-from .rag_service import build_knowledge_base, search_knowledge
-from .streaming import stream_ollama_response
-from .logging_service import create_usage_log, now_ms
-from .rag_service import build_knowledge_base, search_knowledge, get_user_collection_stats
-from .services import (
-    ask_local_model,
-    build_context_prompt,
-    build_rag_context_prompt,
-    list_local_models,
     check_ollama_health,
     generate_chat_title,
+    list_local_models,
 )
+from .streaming import stream_ollama_response
+from .utils import (
+    check_daily_quota,
+    error_response,
+    estimate_text_usage,
+    increase_daily_usage,
+    success_response,
+)
+def validate_ai_request_quota(request, prompt_text):
+    allowed, result = check_daily_quota(request.user, prompt_text)
 
+    if not allowed:
+        return False, error_response(
+            message=result["reason"],
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            errors=result,
+        )
 
+    return True, result
 def get_user_ai_preference(user):
     preference, _ = UserAIPreference.objects.get_or_create(user=user)
     return preference
@@ -101,13 +107,21 @@ class AskAIView(APIView):
         serializer = AskAIRequestSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(
-                {"success": False, "errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Invalid request data",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                errors=serializer.errors,
             )
 
         prompt = serializer.validated_data["prompt"]
-        model = serializer.validated_data.get("model") or settings.DEFAULT_AI_MODEL
+        model = get_selected_model(
+            request,
+            serializer.validated_data.get("model"),
+        )
+
+        allowed, quota_result = validate_ai_request_quota(request, prompt)
+        if not allowed:
+            return quota_result
 
         try:
             answer = ask_local_model(prompt=prompt, model=model)
@@ -119,6 +133,8 @@ class AskAIView(APIView):
                 response=answer,
             )
 
+            increase_daily_usage(request.user, prompt)
+
             create_usage_log(
                 user=request.user,
                 endpoint="/api/ai/ask/",
@@ -128,15 +144,14 @@ class AskAIView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
+            return success_response(
                 {
-                    "success": True,
                     "chat_id": chat.id,
                     "prompt": prompt,
                     "model": model,
                     "answer": answer,
-                },
-                status=status.HTTP_200_OK,
+                    "usage_estimate": estimate_text_usage(prompt),
+                }
             )
 
         except Exception as error:
@@ -150,12 +165,10 @@ class AskAIView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
-                {"success": False, "error": str(error)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            return error_response(
+                message=str(error),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
 class AIChatHistoryListView(APIView):
     def get(self, request):
         search = request.query_params.get("search", "")
@@ -326,23 +339,35 @@ class SendSessionMessageView(APIView):
         started_at = now_ms()
 
         try:
-            session = ChatSession.objects.get(pk=pk, user=request.user)
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
         except ChatSession.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Chat session not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="Chat session not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = SendSessionMessageSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(
-                {"success": False, "errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Invalid request data",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                errors=serializer.errors,
             )
 
         user_message = serializer.validated_data["message"]
-        model = serializer.validated_data.get("model") or session.model_name
+        model = get_selected_model(
+            request,
+            serializer.validated_data.get("model") or session.model_name,
+        )
+
+        allowed, quota_result = validate_ai_request_quota(request, user_message)
+        if not allowed:
+            return quota_result
 
         try:
             context_prompt = build_context_prompt(
@@ -350,7 +375,10 @@ class SendSessionMessageView(APIView):
                 new_message=user_message,
             )
 
-            ai_answer = ask_local_model(prompt=context_prompt, model=model)
+            ai_answer = ask_local_model(
+                prompt=context_prompt,
+                model=model,
+            )
 
             ChatMessage.objects.create(
                 session=session,
@@ -364,15 +392,19 @@ class SendSessionMessageView(APIView):
                 content=ai_answer,
             )
 
+            preference = get_user_ai_preference(request.user)
+
             session.model_name = model
 
-            if session.title == "New Chat":
+            if session.title == "New Chat" and preference.auto_generate_title:
                 session.title = generate_chat_title(
                     user_message=user_message,
                     model=model,
                 )
 
             session.save(update_fields=["model_name", "title", "updated_at"])
+
+            increase_daily_usage(request.user, user_message)
 
             create_usage_log(
                 user=request.user,
@@ -383,12 +415,12 @@ class SendSessionMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
+            return success_response(
                 {
-                    "success": True,
                     "session_id": session.id,
                     "model": model,
                     "user_message": user_message,
+                    "usage_estimate": estimate_text_usage(user_message),
                     "assistant_message": {
                         "id": assistant_message.id,
                         "role": assistant_message.role,
@@ -409,46 +441,89 @@ class SendSessionMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
-                {"success": False, "error": str(error)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            return error_response(
+                message=str(error),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
 class StreamAIView(APIView):
     authentication_classes = []
     permission_classes = []
 
     def get(self, request):
-        return Response(
+        return success_response(
             {
-                "success": True,
-                "message": "This endpoint supports POST streaming only.",
                 "method": "POST",
                 "url": "/api/ai/stream/",
                 "example_body": {
                     "prompt": "Explain Django ORM in simple words",
                     "model": "phi3",
                 },
-            }
+            },
+            message="This endpoint supports POST streaming only.",
         )
 
     def post(self, request):
+        started_at = now_ms()
+
         prompt = request.data.get("prompt")
+        model = get_selected_model(request, request.data.get("model"))
 
         if not prompt:
-            return Response(
-                {"success": False, "error": "Prompt required"},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Prompt is required",
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        model = request.data.get("model") or settings.DEFAULT_AI_MODEL
+        allowed, quota_result = validate_ai_request_quota(request, prompt)
+        if not allowed:
+            return quota_result
 
-        generator = stream_ollama_response(prompt=prompt, model=model)
+        def response_generator():
+            full_answer = ""
 
-        return StreamingHttpResponse(generator, content_type="text/plain")
+            try:
+                for token in stream_ollama_response(
+                    prompt=prompt,
+                    model=model,
+                ):
+                    full_answer += token
+                    yield token
 
+                AIChatHistory.objects.create(
+                    user=request.user,
+                    model_name=model,
+                    prompt=prompt,
+                    response=full_answer,
+                )
 
+                increase_daily_usage(request.user, prompt)
+
+                create_usage_log(
+                    user=request.user,
+                    endpoint="/api/ai/stream/",
+                    model_name=model,
+                    prompt=prompt,
+                    success=True,
+                    started_at_ms=started_at,
+                )
+
+            except Exception as error:
+                create_usage_log(
+                    user=request.user,
+                    endpoint="/api/ai/stream/",
+                    model_name=model,
+                    prompt=prompt,
+                    success=False,
+                    error_message=str(error),
+                    started_at_ms=started_at,
+                )
+
+                yield f"\n[ERROR] {str(error)}"
+
+        return StreamingHttpResponse(
+            response_generator(),
+            content_type="text/plain",
+        )
 class BuildKnowledgeBaseView(APIView):
     def post(self, request):
         try:
@@ -477,10 +552,14 @@ class AskRAGView(APIView):
         model = get_selected_model(request, request.data.get("model"))
 
         if not question:
-            return Response(
-                {"success": False, "error": "Question is required"},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Question is required",
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
+
+        allowed, quota_result = validate_ai_request_quota(request, question)
+        if not allowed:
+            return quota_result
 
         try:
             preference = get_user_ai_preference(request.user)
@@ -493,16 +572,17 @@ class AskRAGView(APIView):
             )
 
             if not retrieval["has_context"]:
-                return Response(
+                increase_daily_usage(request.user, question)
+
+                return success_response(
                     {
-                        "success": True,
                         "question": question,
                         "model": model,
                         "has_context": False,
                         "sources": [],
+                        "usage_estimate": estimate_text_usage(question),
                         "answer": "I do not have enough information in the uploaded knowledge base.",
-                    },
-                    status=status.HTTP_200_OK,
+                    }
                 )
 
             context = retrieval["context"]
@@ -525,6 +605,8 @@ Answer:
 
             answer = ask_local_model(prompt=prompt, model=model)
 
+            increase_daily_usage(request.user, question)
+
             create_usage_log(
                 user=request.user,
                 endpoint="/api/ai/rag/ask/",
@@ -534,17 +616,16 @@ Answer:
                 started_at_ms=started_at,
             )
 
-            return Response(
+            return success_response(
                 {
-                    "success": True,
                     "question": question,
                     "model": model,
                     "has_context": True,
                     "context": context,
                     "sources": sources if preference.show_sources else [],
+                    "usage_estimate": estimate_text_usage(question),
                     "answer": answer,
-                },
-                status=status.HTTP_200_OK,
+                }
             )
 
         except Exception as error:
@@ -558,9 +639,9 @@ Answer:
                 started_at_ms=started_at,
             )
 
-            return Response(
-                {"success": False, "error": str(error)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            return error_response(
+                message=str(error),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 class KnowledgeDocumentListCreateView(APIView):
     def get(self, request):
@@ -691,26 +772,43 @@ class SendSessionRAGMessageView(APIView):
         started_at = now_ms()
 
         try:
-            session = ChatSession.objects.get(pk=pk, user=request.user)
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
         except ChatSession.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Chat session not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="Chat session not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = SendSessionRAGMessageSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(
-                {"success": False, "errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Invalid request data",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                errors=serializer.errors,
             )
 
         user_message = serializer.validated_data["message"]
-        model = serializer.validated_data.get("model") or session.model_name
-        top_k = serializer.validated_data.get("top_k") or 3
+        model = get_selected_model(
+            request,
+            serializer.validated_data.get("model") or session.model_name,
+        )
+        top_k = get_selected_top_k(
+            request,
+            serializer.validated_data.get("top_k"),
+        )
+
+        allowed, quota_result = validate_ai_request_quota(request, user_message)
+        if not allowed:
+            return quota_result
 
         try:
+            preference = get_user_ai_preference(request.user)
+
             retrieval = search_knowledge_with_sources(
                 query=user_message,
                 user=request.user,
@@ -719,6 +817,33 @@ class SendSessionRAGMessageView(APIView):
 
             rag_context = retrieval["context"]
             sources = retrieval["sources"]
+
+            if not retrieval["has_context"]:
+                ChatMessage.objects.create(
+                    session=session,
+                    role="user",
+                    content=user_message,
+                )
+
+                assistant_message = ChatMessage.objects.create(
+                    session=session,
+                    role="assistant",
+                    content="I do not have enough information in the uploaded knowledge base.",
+                )
+
+                increase_daily_usage(request.user, user_message)
+
+                return success_response(
+                    {
+                        "session_id": session.id,
+                        "model": model,
+                        "has_context": False,
+                        "sources": [],
+                        "user_message": user_message,
+                        "usage_estimate": estimate_text_usage(user_message),
+                        "assistant_message": ChatMessageSerializer(assistant_message).data,
+                    }
+                )
 
             context_prompt = build_rag_context_prompt(
                 messages=session.messages,
@@ -742,13 +867,15 @@ class SendSessionRAGMessageView(APIView):
 
             session.model_name = model
 
-            if session.title == "New Chat":
+            if session.title == "New Chat" and preference.auto_generate_title:
                 session.title = generate_chat_title(
                     user_message=user_message,
                     model=model,
                 )
 
             session.save(update_fields=["model_name", "title", "updated_at"])
+
+            increase_daily_usage(request.user, user_message)
 
             create_usage_log(
                 user=request.user,
@@ -759,22 +886,17 @@ class SendSessionRAGMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
+            return success_response(
                 {
-                    "success": True,
                     "session_id": session.id,
                     "model": model,
+                    "has_context": True,
                     "rag_context": rag_context,
-                    "sources": sources,
+                    "sources": sources if preference.show_sources else [],
                     "user_message": user_message,
-                    "assistant_message": {
-                        "id": assistant_message.id,
-                        "role": assistant_message.role,
-                        "content": assistant_message.content,
-                        "created_at": assistant_message.created_at,
-                    },
-                },
-                status=status.HTTP_200_OK,
+                    "usage_estimate": estimate_text_usage(user_message),
+                    "assistant_message": ChatMessageSerializer(assistant_message).data,
+                }
             )
 
         except Exception as error:
@@ -788,17 +910,14 @@ class SendSessionRAGMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
-                {"success": False, "error": str(error)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            return error_response(
+                message=str(error),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 class StreamSessionRAGMessageView(APIView):
     def get(self, request, pk):
-        return Response(
+        return success_response(
             {
-                "success": True,
-                "message": "This endpoint supports POST streaming only.",
                 "method": "POST",
                 "url": f"/api/ai/sessions/{pk}/rag-stream/",
                 "example_body": {
@@ -807,33 +926,50 @@ class StreamSessionRAGMessageView(APIView):
                     "top_k": 3,
                 },
             },
-            status=status.HTTP_200_OK,
+            message="This endpoint supports POST streaming only.",
         )
 
     def post(self, request, pk):
         started_at = now_ms()
 
         try:
-            session = ChatSession.objects.get(pk=pk, user=request.user)
+            session = ChatSession.objects.get(
+                pk=pk,
+                user=request.user,
+                is_deleted=False,
+            )
         except ChatSession.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Chat session not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="Chat session not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = SendSessionRAGMessageSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(
-                {"success": False, "errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Invalid request data",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                errors=serializer.errors,
             )
 
         user_message = serializer.validated_data["message"]
-        model = serializer.validated_data.get("model") or session.model_name
-        top_k = serializer.validated_data.get("top_k") or 3
+        model = get_selected_model(
+            request,
+            serializer.validated_data.get("model") or session.model_name,
+        )
+        top_k = get_selected_top_k(
+            request,
+            serializer.validated_data.get("top_k"),
+        )
+
+        allowed, quota_result = validate_ai_request_quota(request, user_message)
+        if not allowed:
+            return quota_result
 
         try:
+            preference = get_user_ai_preference(request.user)
+
             retrieval = search_knowledge_with_sources(
                 query=user_message,
                 user=request.user,
@@ -843,28 +979,45 @@ class StreamSessionRAGMessageView(APIView):
             rag_context = retrieval["context"]
             sources = retrieval["sources"]
 
-            context_prompt = build_rag_context_prompt(
-                messages=session.messages,
-                new_message=user_message,
-                rag_context=rag_context,
-            )
-
             ChatMessage.objects.create(
                 session=session,
                 role="user",
                 content=user_message,
             )
 
+            if retrieval["has_context"]:
+                context_prompt = build_rag_context_prompt(
+                    messages=session.messages,
+                    new_message=user_message,
+                    rag_context=rag_context,
+                )
+            else:
+                context_prompt = None
+
             def response_generator():
                 full_answer = ""
 
                 try:
-                    yield "Sources used:\n"
+                    if preference.show_sources:
+                        yield "Sources used:\n"
 
-                    for source in sources:
-                        yield f"- {source['source']} ({source['file_name']})\n"
+                        for source in sources:
+                            yield f"- {source['source']} ({source['file_name']})\n"
 
-                    yield "\nAnswer:\n"
+                        yield "\nAnswer:\n"
+
+                    if not retrieval["has_context"]:
+                        fallback_answer = "I do not have enough information in the uploaded knowledge base."
+                        yield fallback_answer
+
+                        ChatMessage.objects.create(
+                            session=session,
+                            role="assistant",
+                            content=fallback_answer,
+                        )
+
+                        increase_daily_usage(request.user, user_message)
+                        return
 
                     for token in stream_ollama_response(
                         prompt=context_prompt,
@@ -881,13 +1034,15 @@ class StreamSessionRAGMessageView(APIView):
 
                     session.model_name = model
 
-                    if session.title == "New Chat":
+                    if session.title == "New Chat" and preference.auto_generate_title:
                         session.title = generate_chat_title(
                             user_message=user_message,
                             model=model,
                         )
 
                     session.save(update_fields=["model_name", "title", "updated_at"])
+
+                    increase_daily_usage(request.user, user_message)
 
                     create_usage_log(
                         user=request.user,
@@ -908,6 +1063,7 @@ class StreamSessionRAGMessageView(APIView):
                         error_message=str(error),
                         started_at_ms=started_at,
                     )
+
                     yield f"\n[ERROR] {str(error)}"
 
             return StreamingHttpResponse(
@@ -926,11 +1082,10 @@ class StreamSessionRAGMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
-                {"success": False, "error": str(error)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            return error_response(
+                message=str(error),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 class LocalModelListView(APIView):
     def get(self, request):
         try:
@@ -1164,11 +1319,15 @@ class RegenerateChatMessageView(APIView):
         started_at = now_ms()
 
         try:
-            session = ChatSession.objects.get(pk=session_pk, user=request.user)
+            session = ChatSession.objects.get(
+                pk=session_pk,
+                user=request.user,
+                is_deleted=False,
+            )
         except ChatSession.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Chat session not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="Chat session not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         try:
@@ -1178,12 +1337,19 @@ class RegenerateChatMessageView(APIView):
                 role="user",
             )
         except ChatMessage.DoesNotExist:
-            return Response(
-                {"success": False, "error": "User message not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="User message not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
-        model = request.data.get("model") or session.model_name
+        model = get_selected_model(
+            request,
+            request.data.get("model") or session.model_name,
+        )
+
+        allowed, quota_result = validate_ai_request_quota(request, user_message.content)
+        if not allowed:
+            return quota_result
 
         try:
             context_prompt = build_context_prompt(
@@ -1205,6 +1371,8 @@ class RegenerateChatMessageView(APIView):
             session.model_name = model
             session.save(update_fields=["model_name", "updated_at"])
 
+            increase_daily_usage(request.user, user_message.content)
+
             create_usage_log(
                 user=request.user,
                 endpoint=f"/api/ai/sessions/{session_pk}/messages/{message_pk}/regenerate/",
@@ -1214,18 +1382,12 @@ class RegenerateChatMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
+            return success_response(
                 {
-                    "success": True,
                     "message": "AI answer regenerated successfully",
-                    "assistant_message": {
-                        "id": assistant_message.id,
-                        "role": assistant_message.role,
-                        "content": assistant_message.content,
-                        "created_at": assistant_message.created_at,
-                    },
-                },
-                status=status.HTTP_200_OK,
+                    "usage_estimate": estimate_text_usage(user_message.content),
+                    "assistant_message": ChatMessageSerializer(assistant_message).data,
+                }
             )
 
         except Exception as error:
@@ -1239,9 +1401,9 @@ class RegenerateChatMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
-                {"success": False, "error": str(error)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            return error_response(
+                message=str(error),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
             
 class RegenerateRAGChatMessageView(APIView):
@@ -1249,11 +1411,15 @@ class RegenerateRAGChatMessageView(APIView):
         started_at = now_ms()
 
         try:
-            session = ChatSession.objects.get(pk=session_pk, user=request.user)
+            session = ChatSession.objects.get(
+                pk=session_pk,
+                user=request.user,
+                is_deleted=False,
+            )
         except ChatSession.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Chat session not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="Chat session not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         try:
@@ -1263,15 +1429,24 @@ class RegenerateRAGChatMessageView(APIView):
                 role="user",
             )
         except ChatMessage.DoesNotExist:
-            return Response(
-                {"success": False, "error": "User message not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="User message not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
-        model = request.data.get("model") or session.model_name
-        top_k = request.data.get("top_k") or 3
+        model = get_selected_model(
+            request,
+            request.data.get("model") or session.model_name,
+        )
+        top_k = get_selected_top_k(request, request.data.get("top_k"))
+
+        allowed, quota_result = validate_ai_request_quota(request, user_message.content)
+        if not allowed:
+            return quota_result
 
         try:
+            preference = get_user_ai_preference(request.user)
+
             retrieval = search_knowledge_with_sources(
                 query=user_message.content,
                 user=request.user,
@@ -1280,6 +1455,25 @@ class RegenerateRAGChatMessageView(APIView):
 
             rag_context = retrieval["context"]
             sources = retrieval["sources"]
+
+            if not retrieval["has_context"]:
+                assistant_message = ChatMessage.objects.create(
+                    session=session,
+                    role="assistant",
+                    content="I do not have enough information in the uploaded knowledge base.",
+                )
+
+                increase_daily_usage(request.user, user_message.content)
+
+                return success_response(
+                    {
+                        "message": "RAG AI answer regenerated successfully",
+                        "has_context": False,
+                        "sources": [],
+                        "usage_estimate": estimate_text_usage(user_message.content),
+                        "assistant_message": ChatMessageSerializer(assistant_message).data,
+                    }
+                )
 
             context_prompt = build_rag_context_prompt(
                 messages=session.messages.filter(created_at__lt=user_message.created_at),
@@ -1301,6 +1495,8 @@ class RegenerateRAGChatMessageView(APIView):
             session.model_name = model
             session.save(update_fields=["model_name", "updated_at"])
 
+            increase_daily_usage(request.user, user_message.content)
+
             create_usage_log(
                 user=request.user,
                 endpoint=f"/api/ai/sessions/{session_pk}/messages/{message_pk}/regenerate-rag/",
@@ -1310,20 +1506,15 @@ class RegenerateRAGChatMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
+            return success_response(
                 {
-                    "success": True,
                     "message": "RAG AI answer regenerated successfully",
+                    "has_context": True,
                     "rag_context": rag_context,
-                    "sources": sources,
-                    "assistant_message": {
-                        "id": assistant_message.id,
-                        "role": assistant_message.role,
-                        "content": assistant_message.content,
-                        "created_at": assistant_message.created_at,
-                    },
-                },
-                status=status.HTTP_200_OK,
+                    "sources": sources if preference.show_sources else [],
+                    "usage_estimate": estimate_text_usage(user_message.content),
+                    "assistant_message": ChatMessageSerializer(assistant_message).data,
+                }
             )
 
         except Exception as error:
@@ -1337,9 +1528,9 @@ class RegenerateRAGChatMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
-                {"success": False, "error": str(error)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            return error_response(
+                message=str(error),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
             
 class ExportChatSessionTXTView(APIView):
@@ -1545,10 +1736,8 @@ class PermanentDeleteChatSessionView(APIView):
         
 class StreamSessionMessageView(APIView):
     def get(self, request, pk):
-        return Response(
+        return success_response(
             {
-                "success": True,
-                "message": "This endpoint supports POST streaming only.",
                 "method": "POST",
                 "url": f"/api/ai/sessions/{pk}/stream-message/",
                 "example_body": {
@@ -1556,7 +1745,7 @@ class StreamSessionMessageView(APIView):
                     "model": "phi3",
                 },
             },
-            status=status.HTTP_200_OK,
+            message="This endpoint supports POST streaming only.",
         )
 
     def post(self, request, pk):
@@ -1569,21 +1758,29 @@ class StreamSessionMessageView(APIView):
                 is_deleted=False,
             )
         except ChatSession.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Chat session not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="Chat session not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = SendSessionMessageSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(
-                {"success": False, "errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Invalid request data",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                errors=serializer.errors,
             )
 
         user_message = serializer.validated_data["message"]
-        model = serializer.validated_data.get("model") or session.model_name
+        model = get_selected_model(
+            request,
+            serializer.validated_data.get("model") or session.model_name,
+        )
+
+        allowed, quota_result = validate_ai_request_quota(request, user_message)
+        if not allowed:
+            return quota_result
 
         try:
             context_prompt = build_context_prompt(
@@ -1614,15 +1811,19 @@ class StreamSessionMessageView(APIView):
                         content=full_answer,
                     )
 
+                    preference = get_user_ai_preference(request.user)
+
                     session.model_name = model
 
-                    if session.title == "New Chat":
+                    if session.title == "New Chat" and preference.auto_generate_title:
                         session.title = generate_chat_title(
                             user_message=user_message,
                             model=model,
                         )
 
                     session.save(update_fields=["model_name", "title", "updated_at"])
+
+                    increase_daily_usage(request.user, user_message)
 
                     create_usage_log(
                         user=request.user,
@@ -1662,11 +1863,10 @@ class StreamSessionMessageView(APIView):
                 started_at_ms=started_at,
             )
 
-            return Response(
-                {"success": False, "error": str(error)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            return error_response(
+                message=str(error),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            
 class ChatSessionStatsView(APIView):
     def get(self, request, pk):
         try:
@@ -2536,13 +2736,16 @@ class DeleteDocumentVectorOnlyView(APIView):
         
 class StreamSessionMessageSSEView(APIView):
     def get(self, request, pk):
-        return Response(
+        return success_response(
             {
-                "success": True,
-                "message": "Use POST for SSE streaming.",
                 "url": f"/api/ai/sessions/{pk}/stream-message-sse/",
+                "method": "POST",
+                "example_body": {
+                    "message": "Explain Django ORM",
+                    "model": "phi3",
+                },
             },
-            status=status.HTTP_200_OK,
+            message="Use POST for SSE streaming.",
         )
 
     def post(self, request, pk):
@@ -2555,24 +2758,29 @@ class StreamSessionMessageSSEView(APIView):
                 is_deleted=False,
             )
         except ChatSession.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Chat session not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="Chat session not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = SendSessionMessageSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(
-                {"success": False, "errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Invalid request data",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                errors=serializer.errors,
             )
 
         user_message = serializer.validated_data["message"]
         model = get_selected_model(
             request,
-            serializer.validated_data.get("model"),
+            serializer.validated_data.get("model") or session.model_name,
         )
+
+        allowed, quota_result = validate_ai_request_quota(request, user_message)
+        if not allowed:
+            return quota_result
 
         context_prompt = build_context_prompt(
             messages=session.messages,
@@ -2589,7 +2797,14 @@ class StreamSessionMessageSSEView(APIView):
             full_answer = ""
 
             try:
-                yield sse_event("start", {"success": True, "model": model})
+                yield sse_event(
+                    "start",
+                    {
+                        "success": True,
+                        "model": model,
+                        "usage_estimate": estimate_text_usage(user_message),
+                    },
+                )
 
                 for token in stream_ollama_response(
                     prompt=context_prompt,
@@ -2604,9 +2819,9 @@ class StreamSessionMessageSSEView(APIView):
                     content=full_answer,
                 )
 
-                session.model_name = model
-
                 preference = get_user_ai_preference(request.user)
+
+                session.model_name = model
 
                 if session.title == "New Chat" and preference.auto_generate_title:
                     session.title = generate_chat_title(
@@ -2615,6 +2830,8 @@ class StreamSessionMessageSSEView(APIView):
                     )
 
                 session.save(update_fields=["model_name", "title", "updated_at"])
+
+                increase_daily_usage(request.user, user_message)
 
                 create_usage_log(
                     user=request.user,
@@ -2629,7 +2846,7 @@ class StreamSessionMessageSSEView(APIView):
                     "done",
                     {
                         "success": True,
-                        "assistant_message_id": assistant_message.id,
+                        "assistant_message": ChatMessageSerializer(assistant_message).data,
                     },
                 )
 
@@ -2656,13 +2873,17 @@ class StreamSessionMessageSSEView(APIView):
     
 class StreamSessionRAGSSEView(APIView):
     def get(self, request, pk):
-        return Response(
+        return success_response(
             {
-                "success": True,
-                "message": "Use POST for RAG SSE streaming.",
                 "url": f"/api/ai/sessions/{pk}/rag-stream-sse/",
+                "method": "POST",
+                "example_body": {
+                    "message": "What is this document about?",
+                    "model": "phi3",
+                    "top_k": 3,
+                },
             },
-            status=status.HTTP_200_OK,
+            message="Use POST for RAG SSE streaming.",
         )
 
     def post(self, request, pk):
@@ -2675,36 +2896,41 @@ class StreamSessionRAGSSEView(APIView):
                 is_deleted=False,
             )
         except ChatSession.DoesNotExist:
-            return Response(
-                {"success": False, "error": "Chat session not found"},
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                message="Chat session not found",
+                status_code=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = SendSessionRAGMessageSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(
-                {"success": False, "errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Invalid request data",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                errors=serializer.errors,
             )
 
         user_message = serializer.validated_data["message"]
         model = get_selected_model(
             request,
-            serializer.validated_data.get("model"),
+            serializer.validated_data.get("model") or session.model_name,
         )
         top_k = get_selected_top_k(
             request,
             serializer.validated_data.get("top_k"),
         )
 
+        allowed, quota_result = validate_ai_request_quota(request, user_message)
+        if not allowed:
+            return quota_result
+
+        preference = get_user_ai_preference(request.user)
+
         retrieval = search_knowledge_with_sources(
             query=user_message,
             user=request.user,
             top_k=top_k,
         )
-
-        preference = get_user_ai_preference(request.user)
 
         ChatMessage.objects.create(
             session=session,
@@ -2722,23 +2948,46 @@ class StreamSessionRAGSSEView(APIView):
                         "success": True,
                         "model": model,
                         "has_context": retrieval["has_context"],
+                        "usage_estimate": estimate_text_usage(user_message),
                     },
                 )
 
                 if preference.show_sources:
-                    yield sse_event("sources", {"sources": retrieval["sources"]})
+                    yield sse_event(
+                        "sources",
+                        {
+                            "sources": retrieval["sources"],
+                        },
+                    )
 
                 if not retrieval["has_context"]:
                     fallback_answer = "I do not have enough information in the uploaded knowledge base."
 
-                    ChatMessage.objects.create(
+                    assistant_message = ChatMessage.objects.create(
                         session=session,
                         role="assistant",
                         content=fallback_answer,
                     )
 
+                    increase_daily_usage(request.user, user_message)
+
+                    create_usage_log(
+                        user=request.user,
+                        endpoint=f"/api/ai/sessions/{pk}/rag-stream-sse/",
+                        model_name=model,
+                        prompt=user_message,
+                        success=True,
+                        started_at_ms=started_at,
+                    )
+
                     yield sse_event("token", {"token": fallback_answer})
-                    yield sse_event("done", {"success": True})
+                    yield sse_event(
+                        "done",
+                        {
+                            "success": True,
+                            "assistant_message": ChatMessageSerializer(assistant_message).data,
+                        },
+                    )
                     return
 
                 context_prompt = build_rag_context_prompt(
@@ -2770,6 +3019,8 @@ class StreamSessionRAGSSEView(APIView):
 
                 session.save(update_fields=["model_name", "title", "updated_at"])
 
+                increase_daily_usage(request.user, user_message)
+
                 create_usage_log(
                     user=request.user,
                     endpoint=f"/api/ai/sessions/{pk}/rag-stream-sse/",
@@ -2783,7 +3034,7 @@ class StreamSessionRAGSSEView(APIView):
                     "done",
                     {
                         "success": True,
-                        "assistant_message_id": assistant_message.id,
+                        "assistant_message": ChatMessageSerializer(assistant_message).data,
                     },
                 )
 
@@ -2806,17 +3057,14 @@ class StreamSessionRAGSSEView(APIView):
         )
         response["Cache-Control"] = "no-cache"
         return response
-    
 class UserAIPreferenceView(APIView):
     def get(self, request):
         preference = get_user_ai_preference(request.user)
 
-        return Response(
+        return success_response(
             {
-                "success": True,
                 "result": UserAIPreferenceSerializer(preference).data,
-            },
-            status=status.HTTP_200_OK,
+            }
         )
 
     def patch(self, request):
@@ -2824,14 +3072,13 @@ class UserAIPreferenceView(APIView):
         serializer = UserAIPreferenceUpdateSerializer(data=request.data)
 
         if not serializer.is_valid():
-            return Response(
-                {"success": False, "errors": serializer.errors},
-                status=status.HTTP_400_BAD_REQUEST,
+            return error_response(
+                message="Invalid preference data",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                errors=serializer.errors,
             )
 
-        data = serializer.validated_data
-
-        for field, value in data.items():
+        for field, value in serializer.validated_data.items():
             if field == "default_model" and not value:
                 continue
 
@@ -2839,11 +3086,90 @@ class UserAIPreferenceView(APIView):
 
         preference.save()
 
-        return Response(
+        return success_response(
             {
-                "success": True,
-                "message": "AI preferences updated successfully",
                 "result": UserAIPreferenceSerializer(preference).data,
             },
-            status=status.HTTP_200_OK,
+            message="AI preferences updated successfully",
+        )
+        
+        
+        
+class AIUsageEstimateView(APIView):
+    def post(self, request):
+        text = request.data.get("text") or request.data.get("prompt") or ""
+
+        if not text:
+            return error_response(
+                message="Text or prompt is required",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        estimate = estimate_text_usage(text)
+        preference = get_user_ai_preference(request.user)
+
+        return success_response(
+            {
+                "estimate": estimate,
+                "limits": {
+                    "max_prompt_characters": preference.max_prompt_characters,
+                    "daily_request_limit": preference.daily_request_limit,
+                },
+            }
+        )
+        
+class DailyAIUsageView(APIView):
+    def get(self, request):
+        usage = DailyAIUsage.objects.filter(user=request.user)
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(usage, request)
+
+        serializer = DailyAIUsageSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
+            {
+                "success": True,
+                "results": serializer.data,
+            }
+        )
+        
+class AIUsageEstimateView(APIView):
+    def post(self, request):
+        text = request.data.get("text") or request.data.get("prompt") or ""
+
+        if not text:
+            return error_response(
+                message="Text or prompt is required",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        estimate = estimate_text_usage(text)
+        preference = get_user_ai_preference(request.user)
+
+        return success_response(
+            {
+                "estimate": estimate,
+                "limits": {
+                    "max_prompt_characters": preference.max_prompt_characters,
+                    "daily_request_limit": preference.daily_request_limit,
+                },
+            }
+        )
+
+
+class DailyAIUsageView(APIView):
+    def get(self, request):
+        usage = DailyAIUsage.objects.filter(user=request.user)
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(usage, request)
+
+        serializer = DailyAIUsageSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
+            {
+                "success": True,
+                "results": serializer.data,
+            }
         )

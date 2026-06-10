@@ -6,6 +6,7 @@ from .models import (
     ChatSession,
     ChatMessage,
     ChatSessionTag,
+    DailyAIUsage,
     KnowledgeDocument,
     UserAIPreference,
 )
@@ -179,6 +180,8 @@ class UserAIPreferenceSerializer(serializers.ModelSerializer):
             "show_sources",
             "auto_generate_title",
             "stream_format",
+            "daily_request_limit",
+            "max_prompt_characters",
             "created_at",
             "updated_at",
         ]
@@ -189,7 +192,19 @@ class UserAIPreferenceUpdateSerializer(serializers.Serializer):
     rag_top_k = serializers.IntegerField(required=False, min_value=1, max_value=20)
     show_sources = serializers.BooleanField(required=False)
     auto_generate_title = serializers.BooleanField(required=False)
+    daily_request_limit = serializers.IntegerField(required=False, min_value=1, max_value=10000)
+    max_prompt_characters = serializers.IntegerField(required=False, min_value=100, max_value=100000)
     stream_format = serializers.ChoiceField(
         required=False,
         choices=["plain", "sse"],
     )
+    
+class DailyAIUsageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DailyAIUsage
+        fields = [
+            "id",
+            "date",
+            "request_count",
+            "character_count",
+        ]
