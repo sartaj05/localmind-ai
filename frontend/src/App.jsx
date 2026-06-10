@@ -45,17 +45,9 @@ function App() {
   const normalizeSessions = (res) => {
     const data = res.data;
 
-    if (Array.isArray(data?.results)) {
-      return data.results;
-    }
-
-    if (Array.isArray(data?.results?.results)) {
-      return data.results.results;
-    }
-
-    if (Array.isArray(data?.data?.results)) {
-      return data.data.results;
-    }
+    if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data?.results?.results)) return data.results.results;
+    if (Array.isArray(data?.data?.results)) return data.data.results;
 
     return [];
   };
@@ -124,12 +116,22 @@ function App() {
         res.data.tokens?.access ||
         res.data.data?.access;
 
+      const refresh =
+        res.data.refresh ||
+        res.data.tokens?.refresh ||
+        res.data.data?.refresh;
+
       if (!access) {
         showPopup("Login success but token not found", "error");
         return;
       }
 
       localStorage.setItem("access_token", access);
+
+      if (refresh) {
+        localStorage.setItem("refresh_token", refresh);
+      }
+
       setIsLoggedIn(true);
       showPopup("Login successful", "success");
     } catch (error) {
@@ -150,9 +152,7 @@ function App() {
 
   const handleNewSession = async () => {
     try {
-      const res = await createSession({
-        title: "New Chat",
-      });
+      const res = await createSession({ title: "New Chat" });
 
       const session = res.data.result;
       await loadSessions();
@@ -247,6 +247,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
     localStorage.removeItem("active_session_id");
     setIsLoggedIn(false);
     setActiveSession(null);
