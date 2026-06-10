@@ -13,6 +13,11 @@ import {
   permanentDeleteSession,
   emptyTrashSessions,
   renameSession,
+  getKnowledgeDocuments,
+  uploadKnowledgeDocument,
+  deleteKnowledgeDocument,
+  rebuildKnowledgeDocument,
+  getDocumentChunks,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -23,13 +28,21 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const [activePanel, setActivePanel] = useState("chat");
+
   const [sessions, setSessions] = useState([]);
   const [sessionSearch, setSessionSearch] = useState("");
   const [sessionView, setSessionView] = useState("active");
-
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [prompt, setPrompt] = useState("");
+
+  const [documents, setDocuments] = useState([]);
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploadingDocs, setUploadingDocs] = useState(false);
+  const [documentChunks, setDocumentChunks] = useState([]);
+  const [previewDocument, setPreviewDocument] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -46,41 +59,47 @@ function App() {
 
   const showPopup = (message, type = "success") => {
     setPopup({ show: true, type, message });
-
     setTimeout(() => {
       setPopup({ show: false, type: "success", message: "" });
     }, 2600);
   };
 
-  const normalizeSessions = (res) => {
+  const normalizeList = (res) => {
     const data = res.data;
-
     if (Array.isArray(data?.results)) return data.results;
     if (Array.isArray(data?.results?.results)) return data.results.results;
     if (Array.isArray(data?.data?.results)) return data.data.results;
-
     return [];
   };
 
   const loadSessions = async (view = sessionView) => {
     try {
       let res;
+      if (view === "archive") res = await getArchivedSessions();
+      else if (view === "trash") res = await getTrashSessions();
+      else res = await getSessions();
 
-      if (view === "archive") {
-        res = await getArchivedSessions();
-      } else if (view === "trash") {
-        res = await getTrashSessions();
-      } else {
-        res = await getSessions();
-      }
-
-      const list = normalizeSessions(res);
+      const list = normalizeList(res);
       setSessions(list);
       return list;
     } catch {
       showPopup("Failed to load sessions", "error");
       return [];
     }
+  };
+
+  const loadDocuments = async () => {
+    try {
+      const res = await getKnowledgeDocuments();
+      setDocuments(normalizeList(res));
+    } catch {
+      showPopup("Failed to load documents", "error");
+    }
+  };
+
+  const handlePanelChange = async (panel) => {
+    setActivePanel(panel);
+    if (panel === "knowledge") await loadDocuments();
   };
 
   const openSession = async (session) => {
@@ -107,24 +126,17 @@ function App() {
     const restoreSession = async () => {
       if (!isLoggedIn) return;
 
-      try {
-        const list = await loadSessions("active");
-        const savedSessionId = localStorage.getItem("active_session_id");
+      const list = await loadSessions("active");
+      const savedSessionId = localStorage.getItem("active_session_id");
 
-        if (!savedSessionId) return;
+      if (!savedSessionId) return;
 
-        const foundSession = list.find(
-          (session) => String(session.id) === String(savedSessionId)
-        );
+      const foundSession = list.find(
+        (session) => String(session.id) === String(savedSessionId)
+      );
 
-        if (foundSession) {
-          await openSession(foundSession);
-        } else {
-          localStorage.removeItem("active_session_id");
-        }
-      } catch {
-        showPopup("Failed to restore session", "error");
-      }
+      if (foundSession) await openSession(foundSession);
+      else localStorage.removeItem("active_session_id");
     };
 
     restoreSession();
@@ -151,10 +163,7 @@ function App() {
       }
 
       localStorage.setItem("access_token", access);
-
-      if (refresh) {
-        localStorage.setItem("refresh_token", refresh);
-      }
+      if (refresh) localStorage.setItem("refresh_token", refresh);
 
       setIsLoggedIn(true);
       showPopup("Login successful", "success");
@@ -176,9 +185,8 @@ function App() {
 
   const handleNewSession = async () => {
     try {
-      if (sessionView !== "active") {
-        setSessionView("active");
-      }
+      setActivePanel("chat");
+      setSessionView("active");
 
       const res = await createSession({ title: "New Chat" });
       const session = res.data.result;
@@ -201,6 +209,11 @@ function App() {
 
   const handleSendMessage = async () => {
     if (!prompt.trim()) return;
+
+    if (activePanel !== "chat") {
+      showPopup("Switch to Chat panel to send messages", "error");
+      return;
+    }
 
     if (sessionView !== "active") {
       showPopup("Switch to Active sessions to send messages", "error");
@@ -231,9 +244,7 @@ function App() {
         },
       ]);
 
-      await sendSessionMessage(session.id, {
-        message: userText,
-      });
+      await sendSessionMessage(session.id, { message: userText });
 
       await loadSessions("active");
 
@@ -244,10 +255,7 @@ function App() {
       setMessages(detail?.messages || []);
       localStorage.setItem("active_session_id", String(session.id));
     } catch (error) {
-      showPopup(
-        error.response?.data?.error?.message || "Message failed",
-        "error"
-      );
+      showPopup(error.response?.data?.error?.message || "Message failed", "error");
     } finally {
       setLoading(false);
     }
@@ -256,13 +264,7 @@ function App() {
   const handlePin = async (session) => {
     try {
       await togglePinSession(session.id);
-      const list = await loadSessions(sessionView);
-
-      if (activeSession?.id === session.id) {
-        const updated = list.find((item) => item.id === session.id);
-        if (updated) setActiveSession(updated);
-      }
-
+      await loadSessions(sessionView);
       showPopup("Session pin updated", "success");
     } catch {
       showPopup("Pin failed", "error");
@@ -280,10 +282,7 @@ function App() {
       }
 
       await loadSessions(sessionView);
-      showPopup(
-        sessionView === "archive" ? "Session unarchived" : "Session archived",
-        "success"
-      );
+      showPopup(sessionView === "archive" ? "Session unarchived" : "Session archived", "success");
     } catch {
       showPopup("Archive failed", "error");
     }
@@ -347,14 +346,10 @@ function App() {
 
   const handleRename = async (session) => {
     const newTitle = window.prompt("Enter new session title", session.title);
-
     if (!newTitle || !newTitle.trim()) return;
 
     try {
-      await renameSession(session.id, {
-        title: newTitle.trim(),
-      });
-
+      await renameSession(session.id, { title: newTitle.trim() });
       await loadSessions(sessionView);
 
       if (activeSession?.id === session.id) {
@@ -365,6 +360,70 @@ function App() {
       showPopup("Session renamed successfully", "success");
     } catch {
       showPopup("Rename failed", "error");
+    }
+  };
+
+  const handleFileChange = (event) => {
+    setSelectedFiles(Array.from(event.target.files || []));
+  };
+
+  const handleUploadDocuments = async () => {
+    if (selectedFiles.length === 0) {
+      showPopup("Please select files first", "error");
+      return;
+    }
+
+    setUploadingDocs(true);
+
+    try {
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("title", file.name);
+        await uploadKnowledgeDocument(formData);
+      }
+
+      setSelectedFiles([]);
+      await loadDocuments();
+      showPopup("Documents uploaded successfully", "success");
+    } catch (error) {
+      showPopup(error.response?.data?.error?.message || "Document upload failed", "error");
+    } finally {
+      setUploadingDocs(false);
+    }
+  };
+
+  const handleDeleteDocument = async (document) => {
+    const ok = window.confirm(`Delete ${document.title}?`);
+    if (!ok) return;
+
+    try {
+      await deleteKnowledgeDocument(document.id);
+      await loadDocuments();
+      setPreviewDocument(null);
+      showPopup("Document deleted", "success");
+    } catch {
+      showPopup("Delete document failed", "error");
+    }
+  };
+
+  const handleRebuildDocument = async (document) => {
+    try {
+      await rebuildKnowledgeDocument(document.id);
+      await loadDocuments();
+      showPopup("Document rebuilt successfully", "success");
+    } catch {
+      showPopup("Rebuild failed", "error");
+    }
+  };
+
+  const handlePreviewChunks = async (document) => {
+    try {
+      const res = await getDocumentChunks(document.id);
+      setPreviewDocument(document);
+      setDocumentChunks(res.data.chunks || []);
+    } catch {
+      showPopup("Chunk preview failed", "error");
     }
   };
 
@@ -380,6 +439,10 @@ function App() {
 
   const filteredSessions = sessions.filter((session) =>
     session.title?.toLowerCase().includes(sessionSearch.toLowerCase())
+  );
+
+  const filteredDocuments = documents.filter((doc) =>
+    doc.title?.toLowerCase().includes(documentSearch.toLowerCase())
   );
 
   if (!isLoggedIn) {
@@ -401,33 +464,20 @@ function App() {
 
             <div className="auth-card">
               <h2>{mode === "login" ? "Welcome back" : "Create account"}</h2>
+
               <p className="muted">
                 {mode === "login"
                   ? "Login using username and password."
                   : "Register using username, email, and password."}
               </p>
 
-              <input
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
+              <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
 
               {mode === "register" && (
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+                <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
               )}
 
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
 
               <button onClick={mode === "login" ? handleLogin : handleRegister}>
                 {mode === "login" ? "Login" : "Register"}
@@ -459,15 +509,14 @@ function App() {
         </div>
       )}
 
-      <div
-        className={`workspace-page ${sidebarOpen ? "with-sidebar" : "no-sidebar"}`}
-      >
+      <div className={`workspace-page ${sidebarOpen ? "with-sidebar" : "no-sidebar"}`}>
         <aside className={`session-sidebar ${sidebarOpen ? "" : "closed"}`}>
           <div className="side-head">
             <div>
               <h2>MindSpace</h2>
-              <p>Session galaxy</p>
+              <p>{activePanel === "chat" ? "Session galaxy" : "Knowledge vault"}</p>
             </div>
+
             <button className="icon-btn" onClick={() => setSidebarOpen(false)}>
               ×
             </button>
@@ -477,147 +526,111 @@ function App() {
             + New Thought
           </button>
 
-          <input
-            className="session-search"
-            placeholder="Search sessions..."
-            value={sessionSearch}
-            onChange={(e) => setSessionSearch(e.target.value)}
-          />
-
-          <div className="session-tabs">
+          <div className="panel-tabs">
             <button
-              className={sessionView === "active" ? "active" : ""}
-              onClick={() => handleChangeSessionView("active")}
+              className={activePanel === "chat" ? "active" : ""}
+              onClick={() => handlePanelChange("chat")}
             >
-              Active
+              Chat
             </button>
 
             <button
-              className={sessionView === "archive" ? "active" : ""}
-              onClick={() => handleChangeSessionView("archive")}
+              className={activePanel === "knowledge" ? "active" : ""}
+              onClick={() => handlePanelChange("knowledge")}
             >
-              Archive
-            </button>
-
-            <button
-              className={sessionView === "trash" ? "active" : ""}
-              onClick={() => handleChangeSessionView("trash")}
-            >
-              Trash
+              Knowledge
             </button>
           </div>
 
-          {sessionView === "trash" && (
-            <button className="empty-trash-btn" onClick={handleEmptyTrash}>
-              Empty Trash
-            </button>
+          {activePanel === "chat" && (
+            <>
+              <input
+                className="session-search"
+                placeholder="Search sessions..."
+                value={sessionSearch}
+                onChange={(e) => setSessionSearch(e.target.value)}
+              />
+
+              <div className="session-tabs">
+                <button className={sessionView === "active" ? "active" : ""} onClick={() => handleChangeSessionView("active")}>
+                  Active
+                </button>
+                <button className={sessionView === "archive" ? "active" : ""} onClick={() => handleChangeSessionView("archive")}>
+                  Archive
+                </button>
+                <button className={sessionView === "trash" ? "active" : ""} onClick={() => handleChangeSessionView("trash")}>
+                  Trash
+                </button>
+              </div>
+
+              {sessionView === "trash" && (
+                <button className="empty-trash-btn" onClick={handleEmptyTrash}>
+                  Empty Trash
+                </button>
+              )}
+
+              <div className="session-list">
+                {filteredSessions.length === 0 ? (
+                  <div className="session-empty">No sessions found</div>
+                ) : (
+                  filteredSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className={`session-item ${activeSession?.id === session.id ? "active" : ""}`}
+                      onClick={() => openSession(session)}
+                    >
+                      <div>
+                        <strong>{session.is_pinned ? "📌 " : ""}{session.title}</strong>
+                        <span>{session.message_count || 0} messages</span>
+                      </div>
+
+                      <div className="session-actions">
+                        {sessionView !== "trash" ? (
+                          <>
+                            <button onClick={(e) => { e.stopPropagation(); handleRename(session); }}>✏️</button>
+                            <button onClick={(e) => { e.stopPropagation(); handlePin(session); }}>📌</button>
+                            <button onClick={(e) => { e.stopPropagation(); handleArchive(session); }}>📦</button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDelete(session); }}>🗑</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={(e) => { e.stopPropagation(); handleRestore(session); }}>♻️</button>
+                            <button onClick={(e) => { e.stopPropagation(); handlePermanentDelete(session); }}>❌</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
           )}
 
-          <div className="session-list">
-            {filteredSessions.length === 0 ? (
-              <div className="session-empty">No sessions found</div>
-            ) : (
-              filteredSessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={`session-item ${
-                    activeSession?.id === session.id ? "active" : ""
-                  }`}
-                  onClick={() => openSession(session)}
-                >
-                  <div>
-                    <strong>
-                      {session.is_pinned ? "📌 " : ""}
-                      {session.title}
-                    </strong>
-                    <span>{session.message_count || 0} messages</span>
-                  </div>
-
-                  <div className="session-actions">
-                    {sessionView !== "trash" && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRename(session);
-                          }}
-                        >
-                          ✏️
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePin(session);
-                          }}
-                        >
-                          📌
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleArchive(session);
-                          }}
-                        >
-                          📦
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(session);
-                          }}
-                        >
-                          🗑
-                        </button>
-                      </>
-                    )}
-
-                    {sessionView === "trash" && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRestore(session);
-                          }}
-                        >
-                          ♻️
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePermanentDelete(session);
-                          }}
-                        >
-                          ❌
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          {activePanel === "knowledge" && (
+            <div className="session-empty">
+              Upload and manage documents from the main panel.
+            </div>
+          )}
         </aside>
 
         <main className={sidebarOpen ? "mind-main" : "mind-main expanded"}>
           <header className="mind-header">
             {!sidebarOpen && (
-              <button
-                className="session-open-btn"
-                onClick={() => setSidebarOpen(true)}
-              >
-                ☰ Sessions
+              <button className="session-open-btn" onClick={() => setSidebarOpen(true)}>
+                ☰ Menu
               </button>
             )}
 
             <div>
-              <h1>{activeSession?.title || "LocalMind Workspace"}</h1>
+              <h1>
+                {activePanel === "chat"
+                  ? activeSession?.title || "LocalMind Workspace"
+                  : "Knowledge Base"}
+              </h1>
               <p>
-                A different AI workspace: session cards, thought stream, and
-                local brain.
+                {activePanel === "chat"
+                  ? "A different AI workspace: session cards, thought stream, and local brain."
+                  : "Upload PDF, DOCX, or TXT files and use them for local RAG answers."}
               </p>
             </div>
 
@@ -626,43 +639,121 @@ function App() {
             </button>
           </header>
 
-          <section className="thought-board">
-            {messages.length === 0 ? (
-              <div className="empty-state">
-                <div className="orb">AI</div>
-                <h2>Start a focused thought session</h2>
-                <p>
-                  Create a session or ask directly. Your local model will answer
-                  and the conversation will be saved.
-                </p>
+          {activePanel === "chat" ? (
+            <>
+              <section className="thought-board">
+                {messages.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="orb">AI</div>
+                    <h2>Start a focused thought session</h2>
+                    <p>Create a session or ask directly. Your local model will answer and the conversation will be saved.</p>
+                  </div>
+                ) : (
+                  messages.map((msg) => (
+                    <div key={msg.id} className={`message-card ${msg.role}`}>
+                      <span>{msg.role === "user" ? "You" : "LocalMind"}</span>
+                      <p>{msg.content}</p>
+                    </div>
+                  ))
+                )}
+              </section>
+
+              <footer className="prompt-dock">
+                <textarea
+                  placeholder="Type your thought here..."
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                />
+
+                <button onClick={handleSendMessage} disabled={loading}>
+                  {loading ? "Thinking..." : "Send"}
+                </button>
+              </footer>
+            </>
+          ) : (
+            <section className="knowledge-board">
+              <div className="knowledge-upload-card">
+                <h2>Knowledge Base</h2>
+                <p>Upload PDF, DOCX, or TXT files for document-aware AI answers.</p>
+
+                <input type="file" multiple accept=".pdf,.docx,.txt" onChange={handleFileChange} />
+
+                <button onClick={handleUploadDocuments} disabled={uploadingDocs}>
+                  {uploadingDocs ? "Uploading..." : "Upload Files"}
+                </button>
+
+                {selectedFiles.length > 0 && (
+                  <div className="selected-files">
+                    {selectedFiles.map((file) => (
+                      <span key={file.name}>{file.name}</span>
+                    ))}
+                  </div>
+                )}
               </div>
-            ) : (
-              messages.map((msg) => (
-                <div key={msg.id} className={`message-card ${msg.role}`}>
-                  <span>{msg.role === "user" ? "You" : "LocalMind"}</span>
-                  <p>{msg.content}</p>
+
+              <div className="documents-header">
+                <h2>Documents</h2>
+
+                <input
+                  placeholder="Search documents..."
+                  value={documentSearch}
+                  onChange={(e) => setDocumentSearch(e.target.value)}
+                />
+              </div>
+
+              <div className="documents-grid">
+                {filteredDocuments.length === 0 ? (
+                  <div className="session-empty">No documents found</div>
+                ) : (
+                  filteredDocuments.map((doc) => (
+                    <div className="document-card" key={doc.id}>
+                      <div>
+                        <h3>{doc.title}</h3>
+                        <p>
+                          Uploaded:{" "}
+                          {doc.created_at
+                            ? new Date(doc.created_at).toLocaleDateString()
+                            : "Unknown"}
+                        </p>
+                      </div>
+
+                      <div className="document-actions">
+                        <button onClick={() => handlePreviewChunks(doc)}>Preview</button>
+                        <button onClick={() => handleRebuildDocument(doc)}>Rebuild</button>
+                        <button className="danger" onClick={() => handleDeleteDocument(doc)}>Delete</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {previewDocument && (
+                <div className="chunk-preview">
+                  <div className="chunk-head">
+                    <h2>Chunks: {previewDocument.title}</h2>
+                    <button onClick={() => setPreviewDocument(null)}>Close</button>
+                  </div>
+
+                  {documentChunks.length === 0 ? (
+                    <p>No chunks found.</p>
+                  ) : (
+                    documentChunks.map((chunk) => (
+                      <div className="chunk-card" key={chunk.chunk_id}>
+                        <strong>{chunk.source || previewDocument.title}</strong>
+                        <p>{chunk.preview || chunk.content}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
-              ))
-            )}
-          </section>
-
-          <footer className="prompt-dock">
-            <textarea
-              placeholder="Type your thought here..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-            />
-
-            <button onClick={handleSendMessage} disabled={loading}>
-              {loading ? "Thinking..." : "Send"}
-            </button>
-          </footer>
+              )}
+            </section>
+          )}
         </main>
       </div>
     </>
