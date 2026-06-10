@@ -43,3 +43,26 @@ export const togglePinSession = (sessionId) => {
 export const toggleArchiveSession = (sessionId) => {
   return apiClient.patch(`/ai/sessions/${sessionId}/toggle-archive/`);
 };
+export const getArchivedSessions = () => {
+  return apiClient.get("/ai/sessions/?archived=true");
+};
+
+export const getTrashSessions = () => {
+  return apiClient.get("/ai/sessions/trash/");
+};
+
+export const toggleArchiveSession = (sessionId) => {
+  return apiClient.patch(`/ai/sessions/${sessionId}/toggle-archive/`);
+};
+
+export const restoreSession = (sessionId) => {
+  return apiClient.patch(`/ai/sessions/${sessionId}/restore/`);
+};
+
+export const permanentDeleteSession = (sessionId) => {
+  return apiClient.delete(`/ai/sessions/${sessionId}/permanent-delete/`);
+};
+
+export const emptyTrashSessions = () => {
+  return apiClient.delete("/ai/sessions/trash/empty/");
+};

@@ -3,9 +3,15 @@ import {
   createSession,
   getSessionDetail,
   getSessions,
+  getArchivedSessions,
+  getTrashSessions,
   sendSessionMessage,
   togglePinSession,
+  toggleArchiveSession,
   deleteSession,
+  restoreSession,
+  permanentDeleteSession,
+  emptyTrashSessions,
   renameSession,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
@@ -19,6 +25,8 @@ function App() {
 
   const [sessions, setSessions] = useState([]);
   const [sessionSearch, setSessionSearch] = useState("");
+  const [sessionView, setSessionView] = useState("active");
+
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [prompt, setPrompt] = useState("");
@@ -33,7 +41,7 @@ function App() {
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState(
-    Boolean(localStorage.getItem("access_token")),
+    Boolean(localStorage.getItem("access_token"))
   );
 
   const showPopup = (message, type = "success") => {
@@ -54,9 +62,18 @@ function App() {
     return [];
   };
 
-  const loadSessions = async () => {
+  const loadSessions = async (view = sessionView) => {
     try {
-      const res = await getSessions();
+      let res;
+
+      if (view === "archive") {
+        res = await getArchivedSessions();
+      } else if (view === "trash") {
+        res = await getTrashSessions();
+      } else {
+        res = await getSessions();
+      }
+
       const list = normalizeSessions(res);
       setSessions(list);
       return list;
@@ -67,6 +84,11 @@ function App() {
   };
 
   const openSession = async (session) => {
+    if (sessionView === "trash") {
+      showPopup("Restore session first to open it", "error");
+      return;
+    }
+
     try {
       setActiveSession(session);
       localStorage.setItem("active_session_id", String(session.id));
@@ -86,13 +108,13 @@ function App() {
       if (!isLoggedIn) return;
 
       try {
-        const list = await loadSessions();
+        const list = await loadSessions("active");
         const savedSessionId = localStorage.getItem("active_session_id");
 
         if (!savedSessionId) return;
 
         const foundSession = list.find(
-          (session) => String(session.id) === String(savedSessionId),
+          (session) => String(session.id) === String(savedSessionId)
         );
 
         if (foundSession) {
@@ -119,7 +141,9 @@ function App() {
         res.data.data?.access;
 
       const refresh =
-        res.data.refresh || res.data.tokens?.refresh || res.data.data?.refresh;
+        res.data.refresh ||
+        res.data.tokens?.refresh ||
+        res.data.data?.refresh;
 
       if (!access) {
         showPopup("Login success but token not found", "error");
@@ -135,10 +159,7 @@ function App() {
       setIsLoggedIn(true);
       showPopup("Login successful", "success");
     } catch (error) {
-      showPopup(
-        error.response?.data?.error?.message || "Login failed",
-        "error",
-      );
+      showPopup(error.response?.data?.error?.message || "Login failed", "error");
     }
   };
 
@@ -149,19 +170,20 @@ function App() {
       setMode("login");
       setPassword("");
     } catch (error) {
-      showPopup(
-        error.response?.data?.error?.message || "Register failed",
-        "error",
-      );
+      showPopup(error.response?.data?.error?.message || "Register failed", "error");
     }
   };
 
   const handleNewSession = async () => {
     try {
-      const res = await createSession({ title: "New Chat" });
+      if (sessionView !== "active") {
+        setSessionView("active");
+      }
 
+      const res = await createSession({ title: "New Chat" });
       const session = res.data.result;
-      await loadSessions();
+
+      await loadSessions("active");
       await openSession(session);
       showPopup("New session created", "success");
     } catch {
@@ -169,8 +191,21 @@ function App() {
     }
   };
 
+  const handleChangeSessionView = async (view) => {
+    setSessionView(view);
+    setActiveSession(null);
+    setMessages([]);
+    localStorage.removeItem("active_session_id");
+    await loadSessions(view);
+  };
+
   const handleSendMessage = async () => {
     if (!prompt.trim()) return;
+
+    if (sessionView !== "active") {
+      showPopup("Switch to Active sessions to send messages", "error");
+      return;
+    }
 
     setLoading(true);
 
@@ -200,7 +235,7 @@ function App() {
         message: userText,
       });
 
-      await loadSessions();
+      await loadSessions("active");
 
       const detailRes = await getSessionDetail(session.id);
       const detail = detailRes.data.result;
@@ -211,7 +246,7 @@ function App() {
     } catch (error) {
       showPopup(
         error.response?.data?.error?.message || "Message failed",
-        "error",
+        "error"
       );
     } finally {
       setLoading(false);
@@ -221,7 +256,7 @@ function App() {
   const handlePin = async (session) => {
     try {
       await togglePinSession(session.id);
-      const list = await loadSessions();
+      const list = await loadSessions(sessionView);
 
       if (activeSession?.id === session.id) {
         const updated = list.find((item) => item.id === session.id);
@@ -231,6 +266,26 @@ function App() {
       showPopup("Session pin updated", "success");
     } catch {
       showPopup("Pin failed", "error");
+    }
+  };
+
+  const handleArchive = async (session) => {
+    try {
+      await toggleArchiveSession(session.id);
+
+      if (activeSession?.id === session.id) {
+        setActiveSession(null);
+        setMessages([]);
+        localStorage.removeItem("active_session_id");
+      }
+
+      await loadSessions(sessionView);
+      showPopup(
+        sessionView === "archive" ? "Session unarchived" : "Session archived",
+        "success"
+      );
+    } catch {
+      showPopup("Archive failed", "error");
     }
   };
 
@@ -244,12 +299,52 @@ function App() {
         localStorage.removeItem("active_session_id");
       }
 
-      await loadSessions();
+      await loadSessions(sessionView);
       showPopup("Session moved to trash", "success");
     } catch {
       showPopup("Delete failed", "error");
     }
   };
+
+  const handleRestore = async (session) => {
+    try {
+      await restoreSession(session.id);
+      await loadSessions("trash");
+      showPopup("Session restored", "success");
+    } catch {
+      showPopup("Restore failed", "error");
+    }
+  };
+
+  const handlePermanentDelete = async (session) => {
+    const ok = window.confirm("Permanently delete this session?");
+    if (!ok) return;
+
+    try {
+      await permanentDeleteSession(session.id);
+      await loadSessions("trash");
+      showPopup("Session permanently deleted", "success");
+    } catch {
+      showPopup("Permanent delete failed", "error");
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    const ok = window.confirm("Empty trash permanently?");
+    if (!ok) return;
+
+    try {
+      await emptyTrashSessions();
+      setActiveSession(null);
+      setMessages([]);
+      localStorage.removeItem("active_session_id");
+      await loadSessions("trash");
+      showPopup("Trash emptied", "success");
+    } catch {
+      showPopup("Empty trash failed", "error");
+    }
+  };
+
   const handleRename = async (session) => {
     const newTitle = window.prompt("Enter new session title", session.title);
 
@@ -260,7 +355,7 @@ function App() {
         title: newTitle.trim(),
       });
 
-      const list = await loadSessions();
+      await loadSessions(sessionView);
 
       if (activeSession?.id === session.id) {
         const detailRes = await getSessionDetail(session.id);
@@ -284,7 +379,7 @@ function App() {
   };
 
   const filteredSessions = sessions.filter((session) =>
-    session.title?.toLowerCase().includes(sessionSearch.toLowerCase()),
+    session.title?.toLowerCase().includes(sessionSearch.toLowerCase())
   );
 
   if (!isLoggedIn) {
@@ -389,6 +484,35 @@ function App() {
             onChange={(e) => setSessionSearch(e.target.value)}
           />
 
+          <div className="session-tabs">
+            <button
+              className={sessionView === "active" ? "active" : ""}
+              onClick={() => handleChangeSessionView("active")}
+            >
+              Active
+            </button>
+
+            <button
+              className={sessionView === "archive" ? "active" : ""}
+              onClick={() => handleChangeSessionView("archive")}
+            >
+              Archive
+            </button>
+
+            <button
+              className={sessionView === "trash" ? "active" : ""}
+              onClick={() => handleChangeSessionView("trash")}
+            >
+              Trash
+            </button>
+          </div>
+
+          {sessionView === "trash" && (
+            <button className="empty-trash-btn" onClick={handleEmptyTrash}>
+              Empty Trash
+            </button>
+          )}
+
           <div className="session-list">
             {filteredSessions.length === 0 ? (
               <div className="session-empty">No sessions found</div>
@@ -410,32 +534,67 @@ function App() {
                   </div>
 
                   <div className="session-actions">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRename(session);
-                      }}
-                    >
-                      ✏️
-                    </button>
+                    {sessionView !== "trash" && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRename(session);
+                          }}
+                        >
+                          ✏️
+                        </button>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePin(session);
-                      }}
-                    >
-                      📌
-                    </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePin(session);
+                          }}
+                        >
+                          📌
+                        </button>
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(session);
-                      }}
-                    >
-                      🗑
-                    </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleArchive(session);
+                          }}
+                        >
+                          📦
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(session);
+                          }}
+                        >
+                          🗑
+                        </button>
+                      </>
+                    )}
+
+                    {sessionView === "trash" && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRestore(session);
+                          }}
+                        >
+                          ♻️
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePermanentDelete(session);
+                          }}
+                        >
+                          ❌
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))
