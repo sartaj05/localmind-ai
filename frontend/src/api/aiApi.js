@@ -16,6 +16,14 @@ export const getSessions = () => {
   return apiClient.get("/ai/sessions/");
 };
 
+export const getArchivedSessions = () => {
+  return apiClient.get("/ai/sessions/?archived=true");
+};
+
+export const getTrashSessions = () => {
+  return apiClient.get("/ai/sessions/trash/");
+};
+
 export const createSession = (data) => {
   return apiClient.post("/ai/sessions/", data);
 };
@@ -43,17 +51,6 @@ export const togglePinSession = (sessionId) => {
 export const toggleArchiveSession = (sessionId) => {
   return apiClient.patch(`/ai/sessions/${sessionId}/toggle-archive/`);
 };
-export const getArchivedSessions = () => {
-  return apiClient.get("/ai/sessions/?archived=true");
-};
-
-export const getTrashSessions = () => {
-  return apiClient.get("/ai/sessions/trash/");
-};
-
-export const toggleArchiveSession = (sessionId) => {
-  return apiClient.patch(`/ai/sessions/${sessionId}/toggle-archive/`);
-};
 
 export const restoreSession = (sessionId) => {
   return apiClient.patch(`/ai/sessions/${sessionId}/restore/`);
@@ -65,4 +62,36 @@ export const permanentDeleteSession = (sessionId) => {
 
 export const emptyTrashSessions = () => {
   return apiClient.delete("/ai/sessions/trash/empty/");
+};
+
+export const getKnowledgeDocuments = () => {
+  return apiClient.get("/ai/documents/");
+};
+
+export const uploadKnowledgeDocument = (formData) => {
+  return apiClient.post("/ai/documents/", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+};
+
+export const deleteKnowledgeDocument = (documentId) => {
+  return apiClient.delete(`/ai/documents/${documentId}/`);
+};
+
+export const rebuildKnowledgeDocument = (documentId) => {
+  return apiClient.post(`/ai/documents/${documentId}/rebuild/`);
+};
+
+export const getDocumentChunks = (documentId) => {
+  return apiClient.get(`/ai/documents/${documentId}/chunks/`);
+};
+
+export const buildKnowledgeBase = () => {
+  return apiClient.post("/ai/rag/build/");
+};
+
+export const getKnowledgeBaseStatus = () => {
+  return apiClient.get("/ai/rag/status/");
 };
