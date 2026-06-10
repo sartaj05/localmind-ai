@@ -6,6 +6,7 @@ import {
   sendSessionMessage,
   togglePinSession,
   deleteSession,
+  renameSession,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -32,7 +33,7 @@ function App() {
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState(
-    Boolean(localStorage.getItem("access_token"))
+    Boolean(localStorage.getItem("access_token")),
   );
 
   const showPopup = (message, type = "success") => {
@@ -91,7 +92,7 @@ function App() {
         if (!savedSessionId) return;
 
         const foundSession = list.find(
-          (session) => String(session.id) === String(savedSessionId)
+          (session) => String(session.id) === String(savedSessionId),
         );
 
         if (foundSession) {
@@ -118,9 +119,7 @@ function App() {
         res.data.data?.access;
 
       const refresh =
-        res.data.refresh ||
-        res.data.tokens?.refresh ||
-        res.data.data?.refresh;
+        res.data.refresh || res.data.tokens?.refresh || res.data.data?.refresh;
 
       if (!access) {
         showPopup("Login success but token not found", "error");
@@ -136,7 +135,10 @@ function App() {
       setIsLoggedIn(true);
       showPopup("Login successful", "success");
     } catch (error) {
-      showPopup(error.response?.data?.error?.message || "Login failed", "error");
+      showPopup(
+        error.response?.data?.error?.message || "Login failed",
+        "error",
+      );
     }
   };
 
@@ -147,7 +149,10 @@ function App() {
       setMode("login");
       setPassword("");
     } catch (error) {
-      showPopup(error.response?.data?.error?.message || "Register failed", "error");
+      showPopup(
+        error.response?.data?.error?.message || "Register failed",
+        "error",
+      );
     }
   };
 
@@ -206,7 +211,7 @@ function App() {
     } catch (error) {
       showPopup(
         error.response?.data?.error?.message || "Message failed",
-        "error"
+        "error",
       );
     } finally {
       setLoading(false);
@@ -245,6 +250,28 @@ function App() {
       showPopup("Delete failed", "error");
     }
   };
+  const handleRename = async (session) => {
+    const newTitle = window.prompt("Enter new session title", session.title);
+
+    if (!newTitle || !newTitle.trim()) return;
+
+    try {
+      await renameSession(session.id, {
+        title: newTitle.trim(),
+      });
+
+      const list = await loadSessions();
+
+      if (activeSession?.id === session.id) {
+        const detailRes = await getSessionDetail(session.id);
+        setActiveSession(detailRes.data.result);
+      }
+
+      showPopup("Session renamed successfully", "success");
+    } catch {
+      showPopup("Rename failed", "error");
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("access_token");
@@ -257,7 +284,7 @@ function App() {
   };
 
   const filteredSessions = sessions.filter((session) =>
-    session.title?.toLowerCase().includes(sessionSearch.toLowerCase())
+    session.title?.toLowerCase().includes(sessionSearch.toLowerCase()),
   );
 
   if (!isLoggedIn) {
@@ -337,7 +364,9 @@ function App() {
         </div>
       )}
 
-      <div className={`workspace-page ${sidebarOpen ? "with-sidebar" : "no-sidebar"}`}>
+      <div
+        className={`workspace-page ${sidebarOpen ? "with-sidebar" : "no-sidebar"}`}
+      >
         <aside className={`session-sidebar ${sidebarOpen ? "" : "closed"}`}>
           <div className="side-head">
             <div>
@@ -384,11 +413,21 @@ function App() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        handleRename(session);
+                      }}
+                    >
+                      ✏️
+                    </button>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
                         handlePin(session);
                       }}
                     >
                       📌
                     </button>
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -407,7 +446,10 @@ function App() {
         <main className={sidebarOpen ? "mind-main" : "mind-main expanded"}>
           <header className="mind-header">
             {!sidebarOpen && (
-              <button className="session-open-btn" onClick={() => setSidebarOpen(true)}>
+              <button
+                className="session-open-btn"
+                onClick={() => setSidebarOpen(true)}
+              >
                 ☰ Sessions
               </button>
             )}
@@ -415,7 +457,8 @@ function App() {
             <div>
               <h1>{activeSession?.title || "LocalMind Workspace"}</h1>
               <p>
-                A different AI workspace: session cards, thought stream, and local brain.
+                A different AI workspace: session cards, thought stream, and
+                local brain.
               </p>
             </div>
 
