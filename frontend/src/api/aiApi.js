@@ -95,3 +95,10 @@ export const buildKnowledgeBase = () => {
 export const getKnowledgeBaseStatus = () => {
   return apiClient.get("/ai/rag/status/");
 };
+export const askRAG = (data) => {
+  return apiClient.post("/ai/rag/ask/", data);
+};
+
+export const sendSessionRAGMessage = (sessionId, data) => {
+  return apiClient.post(`/ai/sessions/${sessionId}/rag-message/`, data);
+};
