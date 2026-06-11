@@ -383,6 +383,8 @@ function App() {
   };
 
   const handleUploadDocuments = async () => {
+    console.log("Upload clicked:", selectedFiles);
+
     if (selectedFiles.length === 0) {
       showPopup("Please select files first", "error");
       return;
@@ -392,25 +394,33 @@ function App() {
 
     try {
       for (const file of selectedFiles) {
+        console.log("Uploading file:", file.name, file.type, file.size);
+
         const formData = new FormData();
         formData.append("file", file);
         formData.append("title", file.name);
-        await uploadKnowledgeDocument(formData);
+
+        const res = await uploadKnowledgeDocument(formData);
+        console.log("Upload response:", res.data);
       }
 
       setSelectedFiles([]);
       await loadDocuments();
       showPopup("Documents uploaded successfully", "success");
     } catch (error) {
+      console.error("Upload failed:", error.response?.data || error);
+
       showPopup(
-        error.response?.data?.error?.message || "Document upload failed",
+        error.response?.data?.error?.message ||
+          error.response?.data?.error ||
+          error.response?.data?.message ||
+          "Document upload failed",
         "error",
       );
     } finally {
       setUploadingDocs(false);
     }
   };
-
   const handleDeleteDocument = async (document) => {
     const ok = window.confirm(`Delete ${document.title}?`);
     if (!ok) return;
@@ -456,6 +466,20 @@ function App() {
     setRagSources([]);
 
     try {
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("title", file.name);
+
+          await uploadKnowledgeDocument(formData);
+        }
+
+        setSelectedFiles([]);
+        await loadDocuments();
+        showPopup("Files uploaded before asking", "success");
+      }
+
       const res = await askRAG({
         question: ragQuestion,
         top_k: 5,
@@ -466,8 +490,13 @@ function App() {
 
       showPopup("Knowledge answer generated", "success");
     } catch (error) {
+      console.error("Knowledge ask failed:", error.response?.data || error);
+
       showPopup(
-        error.response?.data?.error?.message || "Knowledge ask failed",
+        error.response?.data?.error?.message ||
+          error.response?.data?.error ||
+          error.response?.data?.message ||
+          "Knowledge ask failed",
         "error",
       );
     } finally {

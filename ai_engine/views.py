@@ -660,41 +660,49 @@ class KnowledgeDocumentListCreateView(APIView):
         )
 
     def post(self, request):
-        file = request.FILES.get("file")
+        uploaded_file = request.FILES.get("file")
         title = request.data.get("title")
 
-        if not file:
-            return Response(
-                {"success": False, "error": "File is required"},
-                status=status.HTTP_400_BAD_REQUEST,
+        if not uploaded_file:
+            return error_response(
+                message="File is required",
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        allowed_extensions = [".txt", ".pdf"]
+        allowed_extensions = [".txt", ".pdf", ".docx"]
 
-        if not any(file.name.lower().endswith(ext) for ext in allowed_extensions):
-            return Response(
-                {"success": False, "error": "Only TXT and PDF files are allowed"},
-                status=status.HTTP_400_BAD_REQUEST,
+        if not any(
+            uploaded_file.name.lower().endswith(ext)
+            for ext in allowed_extensions
+        ):
+            return error_response(
+                message="Only TXT, PDF, and DOCX files are allowed",
+                status_code=status.HTTP_400_BAD_REQUEST,
             )
 
-        document = KnowledgeDocument.objects.create(
-            user=request.user,
-            title=title or file.name,
-            file=file,
-        )
+        try:
+            document = KnowledgeDocument.objects.create(
+                user=request.user,
+                title=title or uploaded_file.name,
+                file=uploaded_file,
+            )
 
-        total_chunks = build_knowledge_base(request.user)
+            total_chunks = build_knowledge_base(request.user)
 
-        return Response(
-            {
-                "success": True,
-                "message": "Document uploaded successfully and knowledge base rebuilt.",
-                "total_chunks": total_chunks,
-                "result": KnowledgeDocumentSerializer(document).data,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+            return success_response(
+                {
+                    "total_chunks": total_chunks,
+                    "result": KnowledgeDocumentSerializer(document).data,
+                },
+                message="Document uploaded successfully and knowledge base rebuilt.",
+                status_code=status.HTTP_201_CREATED,
+            )
 
+        except Exception as error:
+            return error_response(
+                message=str(error),
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 class KnowledgeDocumentDetailView(APIView):
     def patch(self, request, pk):
         try:
@@ -708,13 +716,13 @@ class KnowledgeDocumentDetailView(APIView):
         title = request.data.get("title")
         new_file = request.FILES.get("file")
 
-        allowed_extensions = [".txt", ".pdf"]
+        allowed_extensions = [".txt", ".pdf",".docx"]
 
         if new_file and not any(
             new_file.name.lower().endswith(ext) for ext in allowed_extensions
         ):
             return Response(
-                {"success": False, "error": "Only TXT and PDF files are allowed"},
+                {"success": False, "error": "Only TXT, PDF, and DOCX files are allowed"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
