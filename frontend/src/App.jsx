@@ -19,6 +19,7 @@ import {
   rebuildKnowledgeDocument,
   getDocumentChunks,
   askRAG,
+  streamRAGAsk,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -47,6 +48,7 @@ function App() {
   const [ragAnswer, setRagAnswer] = useState("");
   const [ragSources, setRagSources] = useState([]);
   const [askingRag, setAskingRag] = useState(false);
+  const [streamingRag, setStreamingRag] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
 
   const [loading, setLoading] = useState(false);
@@ -59,11 +61,12 @@ function App() {
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState(
-    Boolean(localStorage.getItem("access_token")),
+    Boolean(localStorage.getItem("access_token"))
   );
 
   const showPopup = (message, type = "success") => {
     setPopup({ show: true, type, message });
+
     setTimeout(() => {
       setPopup({ show: false, type: "success", message: "" });
     }, 2600);
@@ -71,18 +74,25 @@ function App() {
 
   const normalizeList = (res) => {
     const data = res.data;
+
     if (Array.isArray(data?.results)) return data.results;
     if (Array.isArray(data?.results?.results)) return data.results.results;
     if (Array.isArray(data?.data?.results)) return data.data.results;
+
     return [];
   };
 
   const loadSessions = async (view = sessionView) => {
     try {
       let res;
-      if (view === "archive") res = await getArchivedSessions();
-      else if (view === "trash") res = await getTrashSessions();
-      else res = await getSessions();
+
+      if (view === "archive") {
+        res = await getArchivedSessions();
+      } else if (view === "trash") {
+        res = await getTrashSessions();
+      } else {
+        res = await getSessions();
+      }
 
       const list = normalizeList(res);
       setSessions(list);
@@ -104,7 +114,10 @@ function App() {
 
   const handlePanelChange = async (panel) => {
     setActivePanel(panel);
-    if (panel === "knowledge") await loadDocuments();
+
+    if (panel === "knowledge") {
+      await loadDocuments();
+    }
   };
 
   const openSession = async (session) => {
@@ -137,11 +150,14 @@ function App() {
       if (!savedSessionId) return;
 
       const foundSession = list.find(
-        (session) => String(session.id) === String(savedSessionId),
+        (session) => String(session.id) === String(savedSessionId)
       );
 
-      if (foundSession) await openSession(foundSession);
-      else localStorage.removeItem("active_session_id");
+      if (foundSession) {
+        await openSession(foundSession);
+      } else {
+        localStorage.removeItem("active_session_id");
+      }
     };
 
     restoreSession();
@@ -166,14 +182,17 @@ function App() {
       }
 
       localStorage.setItem("access_token", access);
-      if (refresh) localStorage.setItem("refresh_token", refresh);
+
+      if (refresh) {
+        localStorage.setItem("refresh_token", refresh);
+      }
 
       setIsLoggedIn(true);
       showPopup("Login successful", "success");
     } catch (error) {
       showPopup(
         error.response?.data?.error?.message || "Login failed",
-        "error",
+        "error"
       );
     }
   };
@@ -187,7 +206,7 @@ function App() {
     } catch (error) {
       showPopup(
         error.response?.data?.error?.message || "Register failed",
-        "error",
+        "error"
       );
     }
   };
@@ -202,6 +221,7 @@ function App() {
 
       await loadSessions("active");
       await openSession(session);
+
       showPopup("New session created", "success");
     } catch {
       showPopup("Failed to create session", "error");
@@ -266,7 +286,7 @@ function App() {
     } catch (error) {
       showPopup(
         error.response?.data?.error?.message || "Message failed",
-        "error",
+        "error"
       );
     } finally {
       setLoading(false);
@@ -294,9 +314,10 @@ function App() {
       }
 
       await loadSessions(sessionView);
+
       showPopup(
         sessionView === "archive" ? "Session unarchived" : "Session archived",
-        "success",
+        "success"
       );
     } catch {
       showPopup("Archive failed", "error");
@@ -382,6 +403,21 @@ function App() {
     setSelectedFiles(Array.from(event.target.files || []));
   };
 
+  const uploadSelectedFilesIfAny = async () => {
+    if (selectedFiles.length === 0) return;
+
+    for (const file of selectedFiles) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", file.name);
+
+      await uploadKnowledgeDocument(formData);
+    }
+
+    setSelectedFiles([]);
+    await loadDocuments();
+  };
+
   const handleUploadDocuments = async () => {
     console.log("Upload clicked:", selectedFiles);
 
@@ -415,12 +451,13 @@ function App() {
           error.response?.data?.error ||
           error.response?.data?.message ||
           "Document upload failed",
-        "error",
+        "error"
       );
     } finally {
       setUploadingDocs(false);
     }
   };
+
   const handleDeleteDocument = async (document) => {
     const ok = window.confirm(`Delete ${document.title}?`);
     if (!ok) return;
@@ -466,19 +503,7 @@ function App() {
     setRagSources([]);
 
     try {
-      if (selectedFiles.length > 0) {
-        for (const file of selectedFiles) {
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("title", file.name);
-
-          await uploadKnowledgeDocument(formData);
-        }
-
-        setSelectedFiles([]);
-        await loadDocuments();
-        showPopup("Files uploaded before asking", "success");
-      }
+      await uploadSelectedFilesIfAny();
 
       const res = await askRAG({
         question: ragQuestion,
@@ -497,10 +522,74 @@ function App() {
           error.response?.data?.error ||
           error.response?.data?.message ||
           "Knowledge ask failed",
-        "error",
+        "error"
       );
     } finally {
       setAskingRag(false);
+    }
+  };
+
+  const handleStreamAskKnowledge = async () => {
+    if (!ragQuestion.trim()) {
+      showPopup("Please enter a knowledge question", "error");
+      return;
+    }
+
+    setStreamingRag(true);
+    setRagAnswer("");
+    setRagSources([]);
+
+    try {
+      let session = activeSession;
+
+      if (!session || sessionView !== "active") {
+        const sessionRes = await createSession({ title: "Knowledge Chat" });
+        session = sessionRes.data.result;
+        setActiveSession(session);
+        localStorage.setItem("active_session_id", String(session.id));
+        await loadSessions("active");
+      }
+
+      await uploadSelectedFilesIfAny();
+
+      const response = await streamRAGAsk(session.id, {
+        message: ragQuestion,
+        top_k: 5,
+      });
+
+      if (!response.ok) {
+        throw new Error("RAG streaming request failed");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let finalText = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        finalText += chunk;
+        setRagAnswer(finalText);
+      }
+
+      await openSession(session);
+      await loadSessions("active");
+
+      showPopup("Streaming answer completed", "success");
+    } catch (error) {
+      console.error("Streaming RAG failed:", error);
+
+      showPopup(
+        error.response?.data?.error?.message ||
+          error.message ||
+          "Streaming RAG failed",
+        "error"
+      );
+    } finally {
+      setStreamingRag(false);
     }
   };
 
@@ -515,11 +604,11 @@ function App() {
   };
 
   const filteredSessions = sessions.filter((session) =>
-    session.title?.toLowerCase().includes(sessionSearch.toLowerCase()),
+    session.title?.toLowerCase().includes(sessionSearch.toLowerCase())
   );
 
   const filteredDocuments = documents.filter((doc) =>
-    doc.title?.toLowerCase().includes(documentSearch.toLowerCase()),
+    doc.title?.toLowerCase().includes(documentSearch.toLowerCase())
   );
 
   if (!isLoggedIn) {
@@ -680,7 +769,9 @@ function App() {
                   filteredSessions.map((session) => (
                     <div
                       key={session.id}
-                      className={`session-item ${activeSession?.id === session.id ? "active" : ""}`}
+                      className={`session-item ${
+                        activeSession?.id === session.id ? "active" : ""
+                      }`}
                       onClick={() => openSession(session)}
                     >
                       <div>
@@ -757,7 +848,7 @@ function App() {
 
           {activePanel === "knowledge" && (
             <div className="session-empty">
-              Upload and manage documents from the main panel.
+              Upload, ask, and stream answers from the main panel.
             </div>
           )}
         </aside>
@@ -872,13 +963,23 @@ function App() {
                   onChange={(e) => setRagQuestion(e.target.value)}
                 />
 
-                <button onClick={handleAskKnowledge} disabled={askingRag}>
-                  {askingRag ? "Searching knowledge..." : "Ask Knowledge"}
-                </button>
+                <div className="rag-button-row">
+                  <button onClick={handleAskKnowledge} disabled={askingRag}>
+                    {askingRag ? "Searching knowledge..." : "Ask Knowledge"}
+                  </button>
+
+                  <button
+                    className="stream-btn"
+                    onClick={handleStreamAskKnowledge}
+                    disabled={streamingRag}
+                  >
+                    {streamingRag ? "Streaming..." : "Stream Answer"}
+                  </button>
+                </div>
 
                 {ragAnswer && (
                   <div className="rag-answer-card">
-                    <h3>Answer</h3>
+                    <h3>{streamingRag ? "Streaming Answer" : "Answer"}</h3>
                     <p>{ragAnswer}</p>
                   </div>
                 )}
@@ -924,8 +1025,8 @@ function App() {
                         <h3>{doc.title}</h3>
                         <p>
                           Uploaded:{" "}
-                          {doc.created_at
-                            ? new Date(doc.created_at).toLocaleDateString()
+                          {doc.uploaded_at
+                            ? new Date(doc.uploaded_at).toLocaleDateString()
                             : "Unknown"}
                         </p>
                       </div>

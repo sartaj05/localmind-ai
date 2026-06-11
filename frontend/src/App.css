@@ -926,3 +926,37 @@ textarea:focus {
   white-space: pre-wrap;
   color: #334155;
 }
+.rag-button-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.rag-button-row button {
+  margin-top: 0;
+}
+
+.rag-ask-card .stream-btn {
+  background: linear-gradient(135deg, #0891b2, #14b8a6);
+  box-shadow: 0 16px 35px rgba(20, 184, 166, 0.22);
+}
+
+.rag-ask-card .stream-btn:disabled,
+.rag-ask-card button:disabled,
+.knowledge-upload-card button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.rag-answer-card h3 {
+  margin-top: 0;
+  color: #0f172a;
+}
+
+.rag-answer-card p {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: #334155;
+}

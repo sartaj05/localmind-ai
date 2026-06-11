@@ -95,10 +95,25 @@ export const buildKnowledgeBase = () => {
 export const getKnowledgeBaseStatus = () => {
   return apiClient.get("/ai/rag/status/");
 };
+
 export const askRAG = (data) => {
   return apiClient.post("/ai/rag/ask/", data);
 };
 
 export const sendSessionRAGMessage = (sessionId, data) => {
   return apiClient.post(`/ai/sessions/${sessionId}/rag-message/`, data);
+};
+
+export const streamRAGAsk = (sessionId, data) => {
+  return fetch(
+    `${import.meta.env.VITE_API_BASE_URL}/ai/sessions/${sessionId}/rag-stream/`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    }
+  );
 };
