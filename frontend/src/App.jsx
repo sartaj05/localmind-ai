@@ -20,6 +20,7 @@ import {
   getDocumentChunks,
   askRAG,
   streamRAGAsk,
+  getModels,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -38,6 +39,11 @@ function App() {
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [prompt, setPrompt] = useState("");
+
+  const [models, setModels] = useState([]);
+  const [selectedModel, setSelectedModel] = useState(
+    localStorage.getItem("selected_model") || ""
+  );
 
   const [documents, setDocuments] = useState([]);
   const [documentSearch, setDocumentSearch] = useState("");
@@ -82,6 +88,23 @@ function App() {
     return [];
   };
 
+  const loadModels = async () => {
+    try {
+      const res = await getModels();
+      const list = res.data.results || [];
+
+      setModels(list);
+
+      if (!selectedModel && list.length > 0) {
+        const defaultModel = res.data.default_model || list[0].name;
+        setSelectedModel(defaultModel);
+        localStorage.setItem("selected_model", defaultModel);
+      }
+    } catch {
+      showPopup("Failed to load models", "error");
+    }
+  };
+
   const loadSessions = async (view = sessionView) => {
     try {
       let res;
@@ -110,6 +133,12 @@ function App() {
     } catch {
       showPopup("Failed to load documents", "error");
     }
+  };
+
+  const handleModelChange = (event) => {
+    const model = event.target.value;
+    setSelectedModel(model);
+    localStorage.setItem("selected_model", model);
   };
 
   const handlePanelChange = async (panel) => {
@@ -143,6 +172,8 @@ function App() {
   useEffect(() => {
     const restoreSession = async () => {
       if (!isLoggedIn) return;
+
+      await loadModels();
 
       const list = await loadSessions("active");
       const savedSessionId = localStorage.getItem("active_session_id");
@@ -273,7 +304,10 @@ function App() {
         },
       ]);
 
-      await sendSessionMessage(session.id, { message: userText });
+      await sendSessionMessage(session.id, {
+        message: userText,
+        model: selectedModel,
+      });
 
       await loadSessions("active");
 
@@ -507,6 +541,7 @@ function App() {
 
       const res = await askRAG({
         question: ragQuestion,
+        model: selectedModel,
         top_k: 5,
       });
 
@@ -554,6 +589,7 @@ function App() {
 
       const response = await streamRAGAsk(session.id, {
         message: ragQuestion,
+        model: selectedModel,
         top_k: 5,
       });
 
@@ -875,6 +911,22 @@ function App() {
                   ? "A different AI workspace: session cards, thought stream, and local brain."
                   : "Upload PDF, DOCX, or TXT files and use them for local RAG answers."}
               </p>
+            </div>
+
+            <div className="model-switcher">
+              <span>Model</span>
+
+              <select value={selectedModel} onChange={handleModelChange}>
+                {models.length === 0 ? (
+                  <option value="">Default</option>
+                ) : (
+                  models.map((model) => (
+                    <option key={model.name} value={model.name}>
+                      {model.name}
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
 
             <button className="secondary" onClick={handleLogout}>
