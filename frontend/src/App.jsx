@@ -27,6 +27,10 @@ import {
   getDashboardSummary,
   getKnowledgeHistory,
   deleteKnowledgeHistory,
+  exportKnowledgeHistoryTXT,
+  exportKnowledgeHistoryJSON,
+  exportChatSessionTXT,
+  exportChatSessionJSON,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -186,6 +190,58 @@ function App() {
       showPopup("Delete knowledge history failed", "error");
     }
   };
+  const downloadBlobFile = (response, filename) => {
+    const blob = new Blob([response.data]);
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+  const handleExportKnowledgeTXT = async (item) => {
+  try {
+    const res = await exportKnowledgeHistoryTXT(item.id);
+    downloadBlobFile(res, `knowledge_history_${item.id}.txt`);
+    showPopup("Knowledge TXT exported", "success");
+  } catch {
+    showPopup("Knowledge TXT export failed", "error");
+  }
+};
+
+const handleExportKnowledgeJSON = async (item) => {
+  try {
+    const res = await exportKnowledgeHistoryJSON(item.id);
+    downloadBlobFile(res, `knowledge_history_${item.id}.json`);
+    showPopup("Knowledge JSON exported", "success");
+  } catch {
+    showPopup("Knowledge JSON export failed", "error");
+  }
+};
+
+const handleExportChatTXT = async (session) => {
+  try {
+    const res = await exportChatSessionTXT(session.id);
+    downloadBlobFile(res, `chat_session_${session.id}.txt`);
+    showPopup("Chat TXT exported", "success");
+  } catch {
+    showPopup("Chat TXT export failed", "error");
+  }
+};
+
+const handleExportChatJSON = async (session) => {
+  try {
+    const res = await exportChatSessionJSON(session.id);
+    downloadBlobFile(res, `chat_session_${session.id}.json`);
+    showPopup("Chat JSON exported", "success");
+  } catch {
+    showPopup("Chat JSON export failed", "error");
+  }
+};
   const loadDashboardData = async () => {
     try {
       const [dailyRes, summaryRes] = await Promise.all([
@@ -984,6 +1040,23 @@ function App() {
                               📦
                             </button>
                             <button
+  onClick={(e) => {
+    e.stopPropagation();
+    handleExportChatTXT(session);
+  }}
+>
+  TXT
+</button>
+
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    handleExportChatJSON(session);
+  }}
+>
+  JSON
+</button>
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDelete(session);
@@ -1053,6 +1126,23 @@ function App() {
                         >
                           🗑
                         </button>
+                        <button
+  onClick={(e) => {
+    e.stopPropagation();
+    handleExportKnowledgeTXT(item);
+  }}
+>
+  TXT
+</button>
+
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    handleExportKnowledgeJSON(item);
+  }}
+>
+  JSON
+</button>
                       </div>
                     </div>
                   ))

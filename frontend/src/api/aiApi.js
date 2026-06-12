@@ -56,3 +56,22 @@ export const getKnowledgeHistoryDetail = (id) =>
 
 export const deleteKnowledgeHistory = (id) =>
   apiClient.delete(`/ai/knowledge-history/${id}/`);
+export const exportKnowledgeHistoryTXT = (id) =>
+  apiClient.get(`/ai/knowledge-history/${id}/export/txt/`, {
+    responseType: "blob",
+  });
+
+export const exportKnowledgeHistoryJSON = (id) =>
+  apiClient.get(`/ai/knowledge-history/${id}/export/json/`, {
+    responseType: "blob",
+  });
+
+export const exportChatSessionTXT = (sessionId) =>
+  apiClient.get(`/ai/sessions/${sessionId}/export-txt/`, {
+    responseType: "blob",
+  });
+
+export const exportChatSessionJSON = (sessionId) =>
+  apiClient.get(`/ai/sessions/${sessionId}/export-json/`, {
+    responseType: "blob",
+  });

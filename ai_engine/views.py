@@ -3293,3 +3293,66 @@ class KnowledgeHistoryDetailView(APIView):
             "success": True,
             "message": "Knowledge history deleted successfully",
         })
+        
+class ExportKnowledgeHistoryTXTView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, history_id):
+        item = get_object_or_404(
+            KnowledgeHistory,
+            id=history_id,
+            user=request.user,
+        )
+
+        lines = [
+            f"Knowledge History ID: {item.id}",
+            f"Model: {item.model_name}",
+            f"Source Count: {item.source_count}",
+            f"Created At: {item.created_at}",
+            "",
+            "=" * 60,
+            "QUESTION",
+            "=" * 60,
+            item.question,
+            "",
+            "=" * 60,
+            "ANSWER",
+            "=" * 60,
+            item.answer,
+        ]
+
+        content = "\n".join(lines)
+
+        response = HttpResponse(content, content_type="text/plain")
+        response["Content-Disposition"] = (
+            f'attachment; filename="knowledge_history_{item.id}.txt"'
+        )
+
+        return response
+
+
+class ExportKnowledgeHistoryJSONView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, history_id):
+        item = get_object_or_404(
+            KnowledgeHistory,
+            id=history_id,
+            user=request.user,
+        )
+
+        data = {
+            "id": item.id,
+            "question": item.question,
+            "answer": item.answer,
+            "model_name": item.model_name,
+            "source_count": item.source_count,
+            "created_at": item.created_at,
+        }
+
+        response = Response(data, status=status.HTTP_200_OK)
+        response["Content-Disposition"] = (
+            f'attachment; filename="knowledge_history_{item.id}.json"'
+        )
+
+        return response
