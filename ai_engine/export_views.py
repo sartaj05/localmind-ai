@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-
+from django.contrib.auth import authenticate
 from .models import ChatSession, KnowledgeHistory
 from .serializers import ChatSessionDetailSerializer, KnowledgeHistorySerializer
 
@@ -91,6 +91,31 @@ class ClearKnowledgeHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
+        password = request.data.get("password")
+
+        if not password:
+            return Response(
+                {
+                    "success": False,
+                    "error": "Password is required",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = authenticate(
+            username=request.user.username,
+            password=password,
+        )
+
+        if user is None:
+            return Response(
+                {
+                    "success": False,
+                    "error": "Invalid password",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         histories = KnowledgeHistory.objects.filter(user=request.user)
         deleted_count = histories.count()
         histories.delete()

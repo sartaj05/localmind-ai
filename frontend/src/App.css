@@ -1283,3 +1283,81 @@ textarea:focus {
   font-size: 12px;
   box-shadow: 0 12px 24px rgba(220, 38, 38, 0.18);
 }
+.app-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.app-modal-card {
+  width: min(460px, 100%);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 28px;
+  padding: 26px;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.28);
+}
+
+.app-modal-card h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 26px;
+}
+
+.app-modal-card p {
+  margin: 12px 0 18px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.app-modal-actions {
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.modal-cancel-btn,
+.modal-danger-btn {
+  padding: 12px 18px;
+  border-radius: 15px;
+  color: white;
+}
+
+.modal-cancel-btn {
+  background: linear-gradient(135deg, #64748b, #475569);
+}
+
+.modal-danger-btn {
+  background: linear-gradient(135deg, #dc2626, #f97316);
+}
+.clear-history-btn {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 10px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #dc2626, #f97316);
+  color: white;
+  font-size: 12px;
+  box-shadow: 0 12px 24px rgba(220, 38, 38, 0.18);
+}
+
+.app-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}

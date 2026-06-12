@@ -84,6 +84,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [knowledgeHistory, setKnowledgeHistory] = useState([]);
+  const [clearModalOpen, setClearModalOpen] = useState(false);
+  const [clearPassword, setClearPassword] = useState("");
+  const [clearingHistory, setClearingHistory] = useState(false);
   const [popup, setPopup] = useState({
     show: false,
     type: "success",
@@ -232,22 +235,42 @@ function App() {
     }
   };
 
-  const handleClearKnowledgeHistory = async () => {
-    const ok = window.confirm("Clear all knowledge history?");
-    if (!ok) return;
+  const handleClearKnowledgeHistory = () => {
+    console.log("Clear Knowledge History clicked");
+    setClearPassword("");
+    setClearModalOpen(true);
+  };
+
+  const confirmClearKnowledgeHistory = async () => {
+    if (!clearPassword.trim()) {
+      showPopup("Password is required", "error");
+      return;
+    }
+
+    setClearingHistory(true);
 
     try {
-      await clearKnowledgeHistory();
+      await clearKnowledgeHistory(clearPassword);
+
       setKnowledgeHistory([]);
       setRagQuestion("");
       setRagAnswer("");
       setRagSources([]);
+      setClearPassword("");
+      setClearModalOpen(false);
+
       showPopup("Knowledge history cleared", "success");
-    } catch {
-      showPopup("Clear knowledge history failed", "error");
+    } catch (error) {
+      showPopup(
+        error.response?.data?.error ||
+          error.response?.data?.error?.message ||
+          "Clear knowledge history failed",
+        "error",
+      );
+    } finally {
+      setClearingHistory(false);
     }
   };
-
   const handleExportKnowledgeTXT = async (item) => {
     try {
       const res = await exportKnowledgeHistoryTXT(item.id);
@@ -894,7 +917,6 @@ function App() {
             <span>{popup.message}</span>
           </div>
         )}
-
         <div className="auth-page">
           <div className="auth-shell">
             <div className="brand-panel">
@@ -961,6 +983,50 @@ function App() {
       {popup.show && (
         <div className={`popup-toast ${popup.type}`}>
           <span>{popup.message}</span>
+        </div>
+      )}
+
+      {clearModalOpen && (
+        <div className="app-modal-backdrop">
+          <div className="app-modal-card">
+            <h2>Clear Knowledge History?</h2>
+
+            <p>
+              This will permanently delete all knowledge history. Enter your
+              password to confirm.
+            </p>
+
+            <input
+              type="password"
+              placeholder="Enter password"
+              value={clearPassword}
+              onChange={(e) => setClearPassword(e.target.value)}
+              autoFocus
+            />
+
+            <div className="app-modal-actions">
+              <button
+                type="button"
+                className="modal-cancel-btn"
+                onClick={() => {
+                  setClearPassword("");
+                  setClearModalOpen(false);
+                }}
+                disabled={clearingHistory}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="modal-danger-btn"
+                onClick={confirmClearKnowledgeHistory}
+                disabled={clearingHistory}
+              >
+                {clearingHistory ? "Clearing..." : "Clear History"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1169,8 +1235,13 @@ function App() {
                 </button>
               </div>
               <button
+                type="button"
                 className="clear-history-btn"
-                onClick={handleClearKnowledgeHistory}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleClearKnowledgeHistory();
+                }}
               >
                 Clear Knowledge History
               </button>

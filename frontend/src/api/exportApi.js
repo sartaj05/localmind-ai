@@ -10,8 +10,10 @@ export const exportAllChatSessionsJSON = () =>
     responseType: "blob",
   });
 
-export const clearKnowledgeHistory = () =>
-  apiClient.delete("/ai/knowledge-history/clear/");
+export const clearKnowledgeHistory = (password) =>
+  apiClient.delete("/ai/knowledge-history/clear/", {
+    data: { password },
+  });
 
 export const exportAllKnowledgeHistoryTXT = () =>
   apiClient.get("/ai/knowledge-history/export/all/txt/", {
