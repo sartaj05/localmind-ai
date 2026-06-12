@@ -204,42 +204,61 @@ function App() {
     window.URL.revokeObjectURL(url);
   };
   const handleExportKnowledgeTXT = async (item) => {
+    try {
+      const res = await exportKnowledgeHistoryTXT(item.id);
+      downloadBlobFile(res, `knowledge_history_${item.id}.txt`);
+      showPopup("Knowledge TXT exported", "success");
+    } catch {
+      showPopup("Knowledge TXT export failed", "error");
+    }
+  };
+
+  const handleExportKnowledgeJSON = async (item) => {
+    try {
+      const res = await exportKnowledgeHistoryJSON(item.id);
+      downloadBlobFile(res, `knowledge_history_${item.id}.json`);
+      showPopup("Knowledge JSON exported", "success");
+    } catch {
+      showPopup("Knowledge JSON export failed", "error");
+    }
+  };
+
+  const handleExportChatTXT = async (session) => {
+    try {
+      const res = await exportChatSessionTXT(session.id);
+      downloadBlobFile(res, `chat_session_${session.id}.txt`);
+      showPopup("Chat TXT exported", "success");
+    } catch {
+      showPopup("Chat TXT export failed", "error");
+    }
+  };
+
+  const handleExportChatJSON = async (session) => {
+    try {
+      const res = await exportChatSessionJSON(session.id);
+      downloadBlobFile(res, `chat_session_${session.id}.json`);
+      showPopup("Chat JSON exported", "success");
+    } catch {
+      showPopup("Chat JSON export failed", "error");
+    }
+  };
+  const handleExportAllKnowledgeTXT = async () => {
   try {
-    const res = await exportKnowledgeHistoryTXT(item.id);
-    downloadBlobFile(res, `knowledge_history_${item.id}.txt`);
-    showPopup("Knowledge TXT exported", "success");
+    const res = await exportAllKnowledgeHistoryTXT();
+    downloadBlobFile(res, "all_knowledge_history.txt");
+    showPopup("All knowledge TXT exported", "success");
   } catch {
-    showPopup("Knowledge TXT export failed", "error");
+    showPopup("All knowledge TXT export failed", "error");
   }
 };
 
-const handleExportKnowledgeJSON = async (item) => {
+const handleExportAllKnowledgeJSON = async () => {
   try {
-    const res = await exportKnowledgeHistoryJSON(item.id);
-    downloadBlobFile(res, `knowledge_history_${item.id}.json`);
-    showPopup("Knowledge JSON exported", "success");
+    const res = await exportAllKnowledgeHistoryJSON();
+    downloadBlobFile(res, "all_knowledge_history.json");
+    showPopup("All knowledge JSON exported", "success");
   } catch {
-    showPopup("Knowledge JSON export failed", "error");
-  }
-};
-
-const handleExportChatTXT = async (session) => {
-  try {
-    const res = await exportChatSessionTXT(session.id);
-    downloadBlobFile(res, `chat_session_${session.id}.txt`);
-    showPopup("Chat TXT exported", "success");
-  } catch {
-    showPopup("Chat TXT export failed", "error");
-  }
-};
-
-const handleExportChatJSON = async (session) => {
-  try {
-    const res = await exportChatSessionJSON(session.id);
-    downloadBlobFile(res, `chat_session_${session.id}.json`);
-    showPopup("Chat JSON exported", "success");
-  } catch {
-    showPopup("Chat JSON export failed", "error");
+    showPopup("All knowledge JSON export failed", "error");
   }
 };
   const loadDashboardData = async () => {
@@ -1040,22 +1059,22 @@ const handleExportChatJSON = async (session) => {
                               📦
                             </button>
                             <button
-  onClick={(e) => {
-    e.stopPropagation();
-    handleExportChatTXT(session);
-  }}
->
-  TXT
-</button>
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExportChatTXT(session);
+                              }}
+                            >
+                              TXT
+                            </button>
 
-<button
-  onClick={(e) => {
-    e.stopPropagation();
-    handleExportChatJSON(session);
-  }}
->
-  JSON
-</button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExportChatJSON(session);
+                              }}
+                            >
+                              JSON
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1096,6 +1115,10 @@ const handleExportChatJSON = async (session) => {
           {activePanel === "knowledge" && (
             <>
               <div className="session-search-title">Knowledge History</div>
+              <div className="export-all-row">
+                <button onClick={handleExportAllKnowledgeTXT}>Export All TXT</button>
+                <button onClick={handleExportAllKnowledgeJSON}>Export All JSON</button>
+              </div>
 
               <div className="session-list">
                 {knowledgeHistory.length === 0 ? (
@@ -1127,22 +1150,22 @@ const handleExportChatJSON = async (session) => {
                           🗑
                         </button>
                         <button
-  onClick={(e) => {
-    e.stopPropagation();
-    handleExportKnowledgeTXT(item);
-  }}
->
-  TXT
-</button>
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExportKnowledgeTXT(item);
+                          }}
+                        >
+                          TXT
+                        </button>
 
-<button
-  onClick={(e) => {
-    e.stopPropagation();
-    handleExportKnowledgeJSON(item);
-  }}
->
-  JSON
-</button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExportKnowledgeJSON(item);
+                          }}
+                        >
+                          JSON
+                        </button>
                       </div>
                     </div>
                   ))

@@ -3356,3 +3356,66 @@ class ExportKnowledgeHistoryJSONView(APIView):
         )
 
         return response
+    
+    
+class ExportAllKnowledgeHistoryTXTView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        histories = KnowledgeHistory.objects.filter(user=request.user)
+
+        lines = [
+            "LocalMind AI - All Knowledge History Export",
+            f"Total Items: {histories.count()}",
+            "",
+            "=" * 80,
+        ]
+
+        for index, item in enumerate(histories, start=1):
+            lines.extend(
+                [
+                    "",
+                    f"ITEM {index}",
+                    "-" * 80,
+                    f"ID: {item.id}",
+                    f"Model: {item.model_name}",
+                    f"Source Count: {item.source_count}",
+                    f"Created At: {item.created_at}",
+                    "",
+                    "QUESTION:",
+                    item.question,
+                    "",
+                    "ANSWER:",
+                    item.answer,
+                    "",
+                    "=" * 80,
+                ]
+            )
+
+        content = "\n".join(lines)
+
+        response = HttpResponse(content, content_type="text/plain")
+        response["Content-Disposition"] = (
+            'attachment; filename="all_knowledge_history.txt"'
+        )
+
+        return response
+
+
+class ExportAllKnowledgeHistoryJSONView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        histories = KnowledgeHistory.objects.filter(user=request.user)
+
+        data = {
+            "total": histories.count(),
+            "results": KnowledgeHistorySerializer(histories, many=True).data,
+        }
+
+        response = Response(data, status=status.HTTP_200_OK)
+        response["Content-Disposition"] = (
+            'attachment; filename="all_knowledge_history.json"'
+        )
+
+        return response

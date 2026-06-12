@@ -75,3 +75,13 @@ export const exportChatSessionJSON = (sessionId) =>
   apiClient.get(`/ai/sessions/${sessionId}/export-json/`, {
     responseType: "blob",
   });
+
+export const exportAllKnowledgeHistoryTXT = () =>
+  apiClient.get("/ai/knowledge-history/export/all/txt/", {
+    responseType: "blob",
+  });
+
+export const exportAllKnowledgeHistoryJSON = () =>
+  apiClient.get("/ai/knowledge-history/export/all/json/", {
+    responseType: "blob",
+  });

@@ -22,6 +22,8 @@ from .views import (
     DeleteDocumentVectorOnlyView,
     DocumentChunksPreviewView,
     EmptyTrashChatSessionsView,
+    ExportAllKnowledgeHistoryJSONView,
+    ExportAllKnowledgeHistoryTXTView,
     ExportKnowledgeHistoryJSONView,
     ExportKnowledgeHistoryTXTView,
     KnowledgeHistoryDetailView,
@@ -319,5 +321,16 @@ urlpatterns = [
         "knowledge-history/<int:history_id>/export/json/",
         ExportKnowledgeHistoryJSONView.as_view(),
         name="knowledge-history-export-json",
+    ),
+    path(
+        "knowledge-history/export/all/txt/",
+        ExportAllKnowledgeHistoryTXTView.as_view(),
+        name="knowledge-history-export-all-txt",
+    ),
+
+    path(
+        "knowledge-history/export/all/json/",
+        ExportAllKnowledgeHistoryJSONView.as_view(),
+        name="knowledge-history-export-all-json",
     ),
 ]

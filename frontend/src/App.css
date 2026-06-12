@@ -1258,3 +1258,18 @@ textarea:focus {
     flex-direction: column;
   }
 }
+.export-all-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.export-all-row button {
+  padding: 10px 8px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #4f46e5, #0891b2);
+  color: white;
+  font-size: 11px;
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.18);
+}
