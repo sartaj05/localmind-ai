@@ -32,6 +32,13 @@ import {
   exportChatSessionTXT,
   exportChatSessionJSON,
 } from "./api/aiApi";
+import {
+  exportAllChatSessionsTXT,
+  exportAllChatSessionsJSON,
+  clearKnowledgeHistory,
+} from "./api/exportApi";
+
+
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
 
@@ -203,6 +210,43 @@ function App() {
     link.remove();
     window.URL.revokeObjectURL(url);
   };
+
+  const handleExportAllChatTXT = async () => {
+  try {
+    const res = await exportAllChatSessionsTXT();
+    downloadBlobFile(res, "all_chat_sessions.txt");
+    showPopup("All chat sessions TXT exported", "success");
+  } catch {
+    showPopup("All chat sessions TXT export failed", "error");
+  }
+};
+
+const handleExportAllChatJSON = async () => {
+  try {
+    const res = await exportAllChatSessionsJSON();
+    downloadBlobFile(res, "all_chat_sessions.json");
+    showPopup("All chat sessions JSON exported", "success");
+  } catch {
+    showPopup("All chat sessions JSON export failed", "error");
+  }
+};
+
+const handleClearKnowledgeHistory = async () => {
+  const ok = window.confirm("Clear all knowledge history?");
+  if (!ok) return;
+
+  try {
+    await clearKnowledgeHistory();
+    setKnowledgeHistory([]);
+    setRagQuestion("");
+    setRagAnswer("");
+    setRagSources([]);
+    showPopup("Knowledge history cleared", "success");
+  } catch {
+    showPopup("Clear knowledge history failed", "error");
+  }
+};
+
   const handleExportKnowledgeTXT = async (item) => {
     try {
       const res = await exportKnowledgeHistoryTXT(item.id);
@@ -1119,7 +1163,9 @@ const handleExportAllKnowledgeJSON = async () => {
                 <button onClick={handleExportAllKnowledgeTXT}>Export All TXT</button>
                 <button onClick={handleExportAllKnowledgeJSON}>Export All JSON</button>
               </div>
-
+              <button className="clear-history-btn" onClick={handleClearKnowledgeHistory}>
+                Clear Knowledge History
+              </button>
               <div className="session-list">
                 {knowledgeHistory.length === 0 ? (
                   <div className="session-empty">

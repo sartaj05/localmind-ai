@@ -71,6 +71,11 @@ from .views import (
     BulkRestoreChatSessionsView,
     UserAIPreferenceView,
 )
+from .export_views import (
+    ExportAllChatSessionsTXTView,
+    ExportAllChatSessionsJSONView,
+    ClearKnowledgeHistoryView,
+)
 from .views import StreamAIView
 urlpatterns = [
     path("ask/", AskAIView.as_view(), name="ask-ai"),
@@ -332,5 +337,22 @@ urlpatterns = [
         "knowledge-history/export/all/json/",
         ExportAllKnowledgeHistoryJSONView.as_view(),
         name="knowledge-history-export-all-json",
+    ),
+    path(
+        "sessions/export/all/txt/",
+        ExportAllChatSessionsTXTView.as_view(),
+        name="export-all-chat-sessions-txt",
+    ),
+
+    path(
+        "sessions/export/all/json/",
+        ExportAllChatSessionsJSONView.as_view(),
+        name="export-all-chat-sessions-json",
+    ),
+
+    path(
+        "knowledge-history/clear/",
+        ClearKnowledgeHistoryView.as_view(),
+        name="clear-knowledge-history",
     ),
 ]

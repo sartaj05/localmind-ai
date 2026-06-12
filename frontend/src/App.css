@@ -1273,3 +1273,13 @@ textarea:focus {
   font-size: 11px;
   box-shadow: 0 10px 22px rgba(79, 70, 229, 0.18);
 }
+.clear-history-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px 10px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #dc2626, #f97316);
+  color: white;
+  font-size: 12px;
+  box-shadow: 0 12px 24px rgba(220, 38, 38, 0.18);
+}
