@@ -8,6 +8,7 @@ from .models import (
     ChatSessionTag,
     DailyAIUsage,
     KnowledgeDocument,
+    KnowledgeHistory,
     UserAIPreference,
 )
 
@@ -208,3 +209,13 @@ class DailyAIUsageSerializer(serializers.ModelSerializer):
             "request_count",
             "character_count",
         ]
+        
+class KnowledgeHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KnowledgeHistory
+        fields = "__all__"
+        read_only_fields = (
+            "id",
+            "user",
+            "created_at",
+        )

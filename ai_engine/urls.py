@@ -22,6 +22,8 @@ from .views import (
     DeleteDocumentVectorOnlyView,
     DocumentChunksPreviewView,
     EmptyTrashChatSessionsView,
+    KnowledgeHistoryDetailView,
+    KnowledgeHistoryListView,
     MergeChatSessionsView,
     RAGSourceDocumentDetailView,
     RebuildSingleDocumentView,
@@ -296,4 +298,13 @@ urlpatterns = [
         DailyAIUsageView.as_view(),
         name="daily-ai-usage",
     ),
-]
+    path(
+        "knowledge-history/",
+        KnowledgeHistoryListView.as_view(),
+    ),
+
+    path(
+        "knowledge-history/<int:history_id>/",
+        KnowledgeHistoryDetailView.as_view(),
+    ),
+    ]

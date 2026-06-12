@@ -48,3 +48,11 @@ export const updateAIPreferences = (data) => apiClient.patch("/ai/preferences/",
 
 export const getDailyUsage = () => apiClient.get("/ai/usage/daily/");
 export const getDashboardSummary = () => apiClient.get("/ai/dashboard/summary/");
+export const getKnowledgeHistory = () =>
+  apiClient.get("/ai/knowledge-history/");
+
+export const getKnowledgeHistoryDetail = (id) =>
+  apiClient.get(`/ai/knowledge-history/${id}/`);
+
+export const deleteKnowledgeHistory = (id) =>
+  apiClient.delete(`/ai/knowledge-history/${id}/`);

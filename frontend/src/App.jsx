@@ -25,6 +25,8 @@ import {
   updateAIPreferences,
   getDailyUsage,
   getDashboardSummary,
+  getKnowledgeHistory,
+  deleteKnowledgeHistory,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -69,7 +71,7 @@ function App() {
   const [dashboardSummary, setDashboardSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
+  const [knowledgeHistory, setKnowledgeHistory] = useState([]);
   const [popup, setPopup] = useState({
     show: false,
     type: "success",
@@ -156,6 +158,34 @@ function App() {
       showPopup("Failed to load documents", "error");
     }
   };
+  const loadKnowledgeHistory = async () => {
+    try {
+      const res = await getKnowledgeHistory();
+      setKnowledgeHistory(res.data.results || []);
+    } catch {
+      showPopup("Failed to load knowledge history", "error");
+    }
+  };
+
+  const handleDeleteKnowledgeHistory = async (item) => {
+    const ok = window.confirm("Delete this knowledge history?");
+    if (!ok) return;
+
+    try {
+      await deleteKnowledgeHistory(item.id);
+      await loadKnowledgeHistory();
+
+      if (ragQuestion === item.question) {
+        setRagQuestion("");
+        setRagAnswer("");
+        setRagSources([]);
+      }
+
+      showPopup("Knowledge history deleted", "success");
+    } catch {
+      showPopup("Delete knowledge history failed", "error");
+    }
+  };
   const loadDashboardData = async () => {
     try {
       const [dailyRes, summaryRes] = await Promise.all([
@@ -239,6 +269,7 @@ function App() {
 
     if (panel === "knowledge") {
       await loadDocuments();
+      await loadKnowledgeHistory();
     }
 
     if (panel === "settings") {
@@ -277,6 +308,17 @@ function App() {
 
       await loadModels();
       await loadAIPreferences();
+
+      const savedPanel = localStorage.getItem("active_panel") || "chat";
+
+      if (savedPanel === "knowledge") {
+        await loadDocuments();
+        await loadKnowledgeHistory();
+      }
+
+      if (savedPanel === "dashboard") {
+        await loadDashboardData();
+      }
 
       const list = await loadSessions("active");
       const savedSessionId = localStorage.getItem("active_session_id");
@@ -632,6 +674,8 @@ function App() {
       setRagAnswer(res.data.answer || "");
       setRagSources(res.data.sources || []);
 
+      await loadKnowledgeHistory();
+
       showPopup("Knowledge answer generated", "success");
     } catch (error) {
       showPopup(
@@ -645,7 +689,6 @@ function App() {
       setAskingRag(false);
     }
   };
-
   const handleStreamAskKnowledge = async () => {
     if (!ragQuestion.trim()) {
       showPopup("Please enter a knowledge question", "error");
@@ -695,6 +738,7 @@ function App() {
 
       await openSession(session);
       await loadSessions("active");
+      await loadKnowledgeHistory();
 
       showPopup("Streaming answer completed", "success");
     } catch (error) {
@@ -980,56 +1024,52 @@ function App() {
             <>
               <input
                 className="session-search"
-                placeholder="Search documents..."
+                placeholder="Search knowledge history..."
                 value={documentSearch}
                 onChange={(e) => setDocumentSearch(e.target.value)}
               />
 
-              <div className="session-list">
-                {filteredDocuments.length === 0 ? (
-                  <div className="session-empty">No documents found</div>
+              <div className="knowledge-history-list">
+                {knowledgeHistory.length === 0 ? (
+                  <div className="session-empty">
+                    No knowledge history found
+                  </div>
                 ) : (
-                  filteredDocuments.map((doc) => (
-                    <div key={doc.id} className="session-item">
-                      <div>
-                        <strong>📄 {doc.title}</strong>
+                  knowledgeHistory
+                    .filter((item) =>
+                      item.question
+                        ?.toLowerCase()
+                        .includes(documentSearch.toLowerCase()),
+                    )
+                    .map((item) => (
+                      <div
+                        key={item.id}
+                        className="knowledge-history-card"
+                        onClick={() => {
+                          setRagQuestion(item.question);
+                          setRagAnswer(item.answer);
+                          setRagSources([]);
+                        }}
+                      >
+                        <strong>{item.question.slice(0, 45)}</strong>
+
                         <span>
-                          {doc.uploaded_at
-                            ? new Date(doc.uploaded_at).toLocaleDateString()
-                            : "Uploaded"}
+                          {item.source_count || 0} sources •{" "}
+                          {item.created_at
+                            ? new Date(item.created_at).toLocaleDateString()
+                            : "Saved"}
                         </span>
-                      </div>
-
-                      <div className="session-actions">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePreviewChunks(doc);
-                          }}
-                        >
-                          👁
-                        </button>
 
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleRebuildDocument(doc);
-                          }}
-                        >
-                          🔄
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteDocument(doc);
+                            handleDeleteKnowledgeHistory(item);
                           }}
                         >
                           🗑
                         </button>
                       </div>
-                    </div>
-                  ))
+                    ))
                 )}
               </div>
             </>

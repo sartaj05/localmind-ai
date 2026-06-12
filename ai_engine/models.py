@@ -178,3 +178,31 @@ class DailyAIUsage(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.date} - {self.request_count}"
+    
+    
+class KnowledgeHistory(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="knowledge_history",
+    )
+
+    question = models.TextField()
+
+    answer = models.TextField(blank=True)
+
+    model_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default=""
+    )
+
+    source_count = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.question[:60]

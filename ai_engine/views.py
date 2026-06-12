@@ -5,7 +5,8 @@ from django.db.models import Avg
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from django.shortcuts import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
 import json
 
 from .logging_service import create_usage_log, now_ms
@@ -17,6 +18,7 @@ from .models import (
     ChatSessionTag,
     DailyAIUsage,
     KnowledgeDocument,
+    KnowledgeHistory,
     UserAIPreference,
 )
 from .pagination import StandardResultsSetPagination
@@ -43,6 +45,7 @@ from .serializers import (
     CreateChatSessionSerializer,
     DailyAIUsageSerializer,
     KnowledgeDocumentSerializer,
+    KnowledgeHistorySerializer,
     MergeSessionsSerializer,
     RenameChatSessionSerializer,
     SendSessionMessageSerializer,
@@ -572,16 +575,38 @@ class AskRAGView(APIView):
             )
 
             if not retrieval["has_context"]:
+                fallback_answer = (
+                    "I do not have enough information in the uploaded knowledge base."
+                )
+
+                KnowledgeHistory.objects.create(
+                    user=request.user,
+                    question=question,
+                    answer=fallback_answer,
+                    model_name=model,
+                    source_count=0,
+                )
+
                 increase_daily_usage(request.user, question)
+
+                create_usage_log(
+                    user=request.user,
+                    endpoint="/api/ai/rag/ask/",
+                    model_name=model,
+                    prompt=question,
+                    success=True,
+                    started_at_ms=started_at,
+                )
 
                 return success_response(
                     {
                         "question": question,
                         "model": model,
                         "has_context": False,
+                        "context": "",
                         "sources": [],
                         "usage_estimate": estimate_text_usage(question),
-                        "answer": "I do not have enough information in the uploaded knowledge base.",
+                        "answer": fallback_answer,
                     }
                 )
 
@@ -604,6 +629,14 @@ Answer:
 """
 
             answer = ask_local_model(prompt=prompt, model=model)
+
+            KnowledgeHistory.objects.create(
+                user=request.user,
+                question=question,
+                answer=answer,
+                model_name=model,
+                source_count=len(sources),
+            )
 
             increase_daily_usage(request.user, question)
 
@@ -1006,16 +1039,11 @@ class StreamSessionRAGMessageView(APIView):
                 full_answer = ""
 
                 try:
-                    if preference.show_sources:
-                        yield "Sources used:\n"
-
-                        for source in sources:
-                            yield f"- {source['source']} ({source['file_name']})\n"
-
-                        yield "\nAnswer:\n"
-
                     if not retrieval["has_context"]:
-                        fallback_answer = "I do not have enough information in the uploaded knowledge base."
+                        fallback_answer = (
+                            "I do not have enough information in the uploaded knowledge base."
+                        )
+
                         yield fallback_answer
 
                         ChatMessage.objects.create(
@@ -1024,8 +1052,34 @@ class StreamSessionRAGMessageView(APIView):
                             content=fallback_answer,
                         )
 
+                        KnowledgeHistory.objects.create(
+                            user=request.user,
+                            question=user_message,
+                            answer=fallback_answer,
+                            model_name=model,
+                            source_count=0,
+                        )
+
                         increase_daily_usage(request.user, user_message)
+
+                        create_usage_log(
+                            user=request.user,
+                            endpoint=f"/api/ai/sessions/{pk}/rag-stream/",
+                            model_name=model,
+                            prompt=user_message,
+                            success=True,
+                            started_at_ms=started_at,
+                        )
+
                         return
+
+                    if preference.show_sources:
+                        yield "Sources used:\n"
+
+                        for source in sources:
+                            yield f"- {source['source']} ({source['file_name']})\n"
+
+                        yield "\nAnswer:\n"
 
                     for token in stream_ollama_response(
                         prompt=context_prompt,
@@ -1038,6 +1092,14 @@ class StreamSessionRAGMessageView(APIView):
                         session=session,
                         role="assistant",
                         content=full_answer,
+                    )
+
+                    KnowledgeHistory.objects.create(
+                        user=request.user,
+                        question=user_message,
+                        answer=full_answer,
+                        model_name=model,
+                        source_count=len(sources),
                     )
 
                     session.model_name = model
@@ -3181,3 +3243,53 @@ class DailyAIUsageView(APIView):
                 "results": serializer.data,
             }
         )
+        
+class KnowledgeHistoryListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        search = request.query_params.get("search", "")
+
+        histories = KnowledgeHistory.objects.filter(user=request.user)
+
+        if search:
+            histories = histories.filter(question__icontains=search)
+
+        serializer = KnowledgeHistorySerializer(histories, many=True)
+
+        return Response({
+            "success": True,
+            "results": serializer.data,
+        })
+
+
+class KnowledgeHistoryDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, history_id):
+        item = get_object_or_404(
+            KnowledgeHistory,
+            id=history_id,
+            user=request.user,
+        )
+
+        serializer = KnowledgeHistorySerializer(item)
+
+        return Response({
+            "success": True,
+            "result": serializer.data,
+        })
+
+    def delete(self, request, history_id):
+        item = get_object_or_404(
+            KnowledgeHistory,
+            id=history_id,
+            user=request.user,
+        )
+
+        item.delete()
+
+        return Response({
+            "success": True,
+            "message": "Knowledge history deleted successfully",
+        })

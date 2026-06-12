@@ -1304,3 +1304,74 @@ textarea:focus {
   color: #64748b;
   font-size: 13px;
 }
+
+.knowledge-history-list{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-top:16px;
+}
+
+.knowledge-history-card{
+  padding:12px;
+  border-radius:14px;
+  background:#ffffff;
+  cursor:pointer;
+  border:1px solid #dfe6f5;
+}
+
+.knowledge-history-card:hover{
+  transform:translateY(-2px);
+}
+
+.knowledge-history-card strong{
+  display:block;
+  font-size:13px;
+}
+
+.knowledge-history-card span{
+  font-size:12px;
+  color:#667085;
+}
+.knowledge-history-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.knowledge-history-card {
+  position: relative;
+  padding: 14px 46px 14px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  cursor: pointer;
+}
+
+.knowledge-history-card strong {
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.knowledge-history-card span {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.knowledge-history-card button {
+  position: absolute;
+  right: 10px;
+  top: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  background: #eef2ff;
+  color: #4338ca;
+}
