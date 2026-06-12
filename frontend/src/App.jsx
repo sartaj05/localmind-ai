@@ -36,7 +36,7 @@ function App() {
   const [password, setPassword] = useState("");
 
   const [activePanel, setActivePanel] = useState(
-    localStorage.getItem("active_panel") || "chat"
+    localStorage.getItem("active_panel") || "chat",
   );
 
   const [sessions, setSessions] = useState([]);
@@ -977,14 +977,123 @@ function App() {
           )}
 
           {activePanel === "knowledge" && (
-            <div className="session-empty">
-              Upload, ask, and stream answers from the main panel.
+            <>
+              <input
+                className="session-search"
+                placeholder="Search documents..."
+                value={documentSearch}
+                onChange={(e) => setDocumentSearch(e.target.value)}
+              />
+
+              <div className="session-list">
+                {filteredDocuments.length === 0 ? (
+                  <div className="session-empty">No documents found</div>
+                ) : (
+                  filteredDocuments.map((doc) => (
+                    <div key={doc.id} className="session-item">
+                      <div>
+                        <strong>📄 {doc.title}</strong>
+                        <span>
+                          {doc.uploaded_at
+                            ? new Date(doc.uploaded_at).toLocaleDateString()
+                            : "Uploaded"}
+                        </span>
+                      </div>
+
+                      <div className="session-actions">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePreviewChunks(doc);
+                          }}
+                        >
+                          👁
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRebuildDocument(doc);
+                          }}
+                        >
+                          🔄
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDocument(doc);
+                          }}
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+          {activePanel === "settings" && (
+            <div className="side-info-list">
+              <div className="side-info-card">
+                <strong>🤖 Default Model</strong>
+                <span>
+                  {aiPreferences?.default_model || selectedModel || "Default"}
+                </span>
+              </div>
+
+              <div className="side-info-card">
+                <strong>📚 RAG Top K</strong>
+                <span>{aiPreferences?.rag_top_k || 3} chunks</span>
+              </div>
+
+              <div className="side-info-card">
+                <strong>🔎 Sources</strong>
+                <span>
+                  {aiPreferences?.show_sources ? "Enabled" : "Disabled"}
+                </span>
+              </div>
+
+              <div className="side-info-card">
+                <strong>⚡ Stream</strong>
+                <span>{aiPreferences?.stream_format || "plain"}</span>
+              </div>
+
+              <div className="side-info-card">
+                <strong>🧾 Daily Limit</strong>
+                <span>
+                  {aiPreferences?.daily_request_limit || 100} requests
+                </span>
+              </div>
             </div>
           )}
+          {activePanel === "dashboard" && (
+            <div className="side-info-list">
+              <div className="side-info-card">
+                <strong>📊 Today</strong>
+                <span>{dailyUsage?.usage?.request_count ?? 0} requests</span>
+              </div>
 
-          {activePanel === "settings" && (
-            <div className="session-empty">
-              Manage default model, RAG behavior, source display, and quota.
+              <div className="side-info-card">
+                <strong>🟢 Remaining</strong>
+                <span>{dailyUsage?.remaining_requests ?? "-"} left</span>
+              </div>
+
+              <div className="side-info-card">
+                <strong>💬 Sessions</strong>
+                <span>{dashboardSummary?.total_sessions ?? 0}</span>
+              </div>
+
+              <div className="side-info-card">
+                <strong>📄 Documents</strong>
+                <span>{dashboardSummary?.total_documents ?? 0}</span>
+              </div>
+
+              <div className="side-info-card">
+                <strong>⚙️ AI Requests</strong>
+                <span>{dashboardSummary?.total_ai_requests ?? 0}</span>
+              </div>
             </div>
           )}
         </aside>
