@@ -1149,3 +1149,11 @@ textarea:focus {
     flex-direction: column;
   }
 }
+.panel-tabs {
+  grid-template-columns: repeat(4, 1fr);
+}
+.panel-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}

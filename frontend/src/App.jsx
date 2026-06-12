@@ -23,6 +23,8 @@ import {
   getModels,
   getAIPreferences,
   updateAIPreferences,
+  getDailyUsage,
+  getDashboardSummary,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -33,7 +35,9 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [activePanel, setActivePanel] = useState("chat");
+  const [activePanel, setActivePanel] = useState(
+    localStorage.getItem("active_panel") || "chat"
+  );
 
   const [sessions, setSessions] = useState([]);
   const [sessionSearch, setSessionSearch] = useState("");
@@ -44,7 +48,7 @@ function App() {
 
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState(
-    localStorage.getItem("selected_model") || ""
+    localStorage.getItem("selected_model") || "",
   );
 
   const [aiPreferences, setAiPreferences] = useState(null);
@@ -61,7 +65,8 @@ function App() {
   const [askingRag, setAskingRag] = useState(false);
   const [streamingRag, setStreamingRag] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
-
+  const [dailyUsage, setDailyUsage] = useState(null);
+  const [dashboardSummary, setDashboardSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -72,7 +77,7 @@ function App() {
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState(
-    Boolean(localStorage.getItem("access_token"))
+    Boolean(localStorage.getItem("access_token")),
   );
 
   const showPopup = (message, type = "success") => {
@@ -151,6 +156,19 @@ function App() {
       showPopup("Failed to load documents", "error");
     }
   };
+  const loadDashboardData = async () => {
+    try {
+      const [dailyRes, summaryRes] = await Promise.all([
+        getDailyUsage(),
+        getDashboardSummary(),
+      ]);
+
+      setDailyUsage(dailyRes.data);
+      setDashboardSummary(summaryRes.data.summary);
+    } catch {
+      showPopup("Failed to load dashboard", "error");
+    }
+  };
 
   const handleModelChange = (event) => {
     const model = event.target.value;
@@ -185,7 +203,9 @@ function App() {
         auto_generate_title: Boolean(aiPreferences.auto_generate_title),
         stream_format: aiPreferences.stream_format || "plain",
         daily_request_limit: Number(aiPreferences.daily_request_limit || 100),
-        max_prompt_characters: Number(aiPreferences.max_prompt_characters || 8000),
+        max_prompt_characters: Number(
+          aiPreferences.max_prompt_characters || 8000,
+        ),
       };
 
       const res = await updateAIPreferences(payload);
@@ -202,7 +222,7 @@ function App() {
     } catch (error) {
       showPopup(
         error.response?.data?.error?.message || "Failed to save preferences",
-        "error"
+        "error",
       );
     } finally {
       setSavingPreferences(false);
@@ -215,6 +235,7 @@ function App() {
 
   const handlePanelChange = async (panel) => {
     setActivePanel(panel);
+    localStorage.setItem("active_panel", panel);
 
     if (panel === "knowledge") {
       await loadDocuments();
@@ -223,6 +244,10 @@ function App() {
     if (panel === "settings") {
       await loadModels();
       await loadAIPreferences();
+    }
+
+    if (panel === "dashboard") {
+      await loadDashboardData();
     }
   };
 
@@ -259,7 +284,7 @@ function App() {
       if (!savedSessionId) return;
 
       const foundSession = list.find(
-        (session) => String(session.id) === String(savedSessionId)
+        (session) => String(session.id) === String(savedSessionId),
       );
 
       if (foundSession) await openSession(foundSession);
@@ -296,7 +321,10 @@ function App() {
       setIsLoggedIn(true);
       showPopup("Login successful", "success");
     } catch (error) {
-      showPopup(error.response?.data?.error?.message || "Login failed", "error");
+      showPopup(
+        error.response?.data?.error?.message || "Login failed",
+        "error",
+      );
     }
   };
 
@@ -307,7 +335,10 @@ function App() {
       setMode("login");
       setPassword("");
     } catch (error) {
-      showPopup(error.response?.data?.error?.message || "Register failed", "error");
+      showPopup(
+        error.response?.data?.error?.message || "Register failed",
+        "error",
+      );
     }
   };
 
@@ -387,7 +418,10 @@ function App() {
       setMessages(detail?.messages || []);
       localStorage.setItem("active_session_id", String(session.id));
     } catch (error) {
-      showPopup(error.response?.data?.error?.message || "Message failed", "error");
+      showPopup(
+        error.response?.data?.error?.message || "Message failed",
+        "error",
+      );
     } finally {
       setLoading(false);
     }
@@ -417,7 +451,7 @@ function App() {
 
       showPopup(
         sessionView === "archive" ? "Session unarchived" : "Session archived",
-        "success"
+        "success",
       );
     } catch {
       showPopup("Archive failed", "error");
@@ -535,7 +569,7 @@ function App() {
           error.response?.data?.error ||
           error.response?.data?.message ||
           "Document upload failed",
-        "error"
+        "error",
       );
     } finally {
       setUploadingDocs(false);
@@ -605,7 +639,7 @@ function App() {
           error.response?.data?.error ||
           error.response?.data?.message ||
           "Knowledge ask failed",
-        "error"
+        "error",
       );
     } finally {
       setAskingRag(false);
@@ -681,11 +715,11 @@ function App() {
   };
 
   const filteredSessions = sessions.filter((session) =>
-    session.title?.toLowerCase().includes(sessionSearch.toLowerCase())
+    session.title?.toLowerCase().includes(sessionSearch.toLowerCase()),
   );
 
   const filteredDocuments = documents.filter((doc) =>
-    doc.title?.toLowerCase().includes(documentSearch.toLowerCase())
+    doc.title?.toLowerCase().includes(documentSearch.toLowerCase()),
   );
 
   if (!isLoggedIn) {
@@ -778,7 +812,9 @@ function App() {
                   ? "Session galaxy"
                   : activePanel === "knowledge"
                     ? "Knowledge vault"
-                    : "AI control room"}
+                    : activePanel === "settings"
+                      ? "AI control room"
+                      : "Usage dashboard"}
               </p>
             </div>
 
@@ -811,6 +847,12 @@ function App() {
               onClick={() => handlePanelChange("settings")}
             >
               Settings
+            </button>
+            <button
+              className={activePanel === "dashboard" ? "active" : ""}
+              onClick={() => handlePanelChange("dashboard")}
+            >
+              Dashboard
             </button>
           </div>
 
@@ -964,14 +1006,18 @@ function App() {
                   ? activeSession?.title || "LocalMind Workspace"
                   : activePanel === "knowledge"
                     ? "Knowledge Base"
-                    : "AI Preferences"}
+                    : activePanel === "settings"
+                      ? "AI Preferences"
+                      : "Usage Dashboard"}
               </h1>
               <p>
                 {activePanel === "chat"
                   ? "A different AI workspace: session cards, thought stream, and local brain."
                   : activePanel === "knowledge"
                     ? "Upload PDF, DOCX, or TXT files and use them for local RAG answers."
-                    : "Control model defaults, RAG behavior, sources, and usage limits."}
+                    : activePanel === "settings"
+                      ? "Control model defaults, RAG behavior, sources, and usage limits."
+                      : "Track daily quota, requests, documents, sessions, and response health."}
               </p>
             </div>
 
@@ -1186,7 +1232,7 @@ function App() {
                 </div>
               )}
             </section>
-          ) : (
+          ) : activePanel === "settings" ? (
             <section className="settings-board">
               <div className="settings-card">
                 <div className="settings-head">
@@ -1215,7 +1261,7 @@ function App() {
                           onChange={(e) =>
                             handlePreferenceChange(
                               "default_model",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                         >
@@ -1253,7 +1299,7 @@ function App() {
                           onChange={(e) =>
                             handlePreferenceChange(
                               "stream_format",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                         >
@@ -1272,7 +1318,7 @@ function App() {
                           onChange={(e) =>
                             handlePreferenceChange(
                               "daily_request_limit",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                         />
@@ -1288,7 +1334,7 @@ function App() {
                           onChange={(e) =>
                             handlePreferenceChange(
                               "max_prompt_characters",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                         />
@@ -1303,7 +1349,7 @@ function App() {
                           onChange={(e) =>
                             handlePreferenceChange(
                               "show_sources",
-                              e.target.checked
+                              e.target.checked,
                             )
                           }
                         />
@@ -1320,7 +1366,7 @@ function App() {
                           onChange={(e) =>
                             handlePreferenceChange(
                               "auto_generate_title",
-                              e.target.checked
+                              e.target.checked,
                             )
                           }
                         />
@@ -1343,6 +1389,66 @@ function App() {
                     </button>
                   </>
                 )}
+              </div>
+            </section>
+          ) : (
+            <section className="dashboard-board">
+              <div className="dashboard-head-card">
+                <div>
+                  <h2>Usage Quota Dashboard</h2>
+                  <p>
+                    Monitor daily usage, quota, documents, sessions, and request
+                    health.
+                  </p>
+                </div>
+
+                <button onClick={loadDashboardData}>Refresh</button>
+              </div>
+
+              <div className="dashboard-grid">
+                <div className="dashboard-card">
+                  <span>Today Requests</span>
+                  <strong>{dailyUsage?.usage?.request_count ?? 0}</strong>
+                </div>
+
+                <div className="dashboard-card">
+                  <span>Daily Limit</span>
+                  <strong>
+                    {dailyUsage?.preference?.daily_request_limit ?? "-"}
+                  </strong>
+                </div>
+
+                <div className="dashboard-card">
+                  <span>Remaining</span>
+                  <strong>{dailyUsage?.remaining_requests ?? "-"}</strong>
+                </div>
+
+                <div className="dashboard-card">
+                  <span>Characters Used</span>
+                  <strong>{dailyUsage?.usage?.character_count ?? 0}</strong>
+                </div>
+
+                <div className="dashboard-card">
+                  <span>Total Sessions</span>
+                  <strong>{dashboardSummary?.total_sessions ?? 0}</strong>
+                </div>
+
+                <div className="dashboard-card">
+                  <span>Total Documents</span>
+                  <strong>{dashboardSummary?.total_documents ?? 0}</strong>
+                </div>
+
+                <div className="dashboard-card">
+                  <span>Total AI Requests</span>
+                  <strong>{dashboardSummary?.total_ai_requests ?? 0}</strong>
+                </div>
+
+                <div className="dashboard-card">
+                  <span>Avg Response Time</span>
+                  <strong>
+                    {dashboardSummary?.average_response_time_ms ?? 0} ms
+                  </strong>
+                </div>
               </div>
             </section>
           )}
