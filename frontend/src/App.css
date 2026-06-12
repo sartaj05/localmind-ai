@@ -1375,3 +1375,12 @@ textarea:focus {
   background: #eef2ff;
   color: #4338ca;
 }
+.session-search-title {
+  margin-top: 16px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}

@@ -1022,44 +1022,29 @@ function App() {
 
           {activePanel === "knowledge" && (
             <>
-              <input
-                className="session-search"
-                placeholder="Search knowledge history..."
-                value={documentSearch}
-                onChange={(e) => setDocumentSearch(e.target.value)}
-              />
+              <div className="session-search-title">Knowledge History</div>
 
-              <div className="knowledge-history-list">
+              <div className="session-list">
                 {knowledgeHistory.length === 0 ? (
                   <div className="session-empty">
-                    No knowledge history found
+                    No knowledge questions yet
                   </div>
                 ) : (
-                  knowledgeHistory
-                    .filter((item) =>
-                      item.question
-                        ?.toLowerCase()
-                        .includes(documentSearch.toLowerCase()),
-                    )
-                    .map((item) => (
-                      <div
-                        key={item.id}
-                        className="knowledge-history-card"
-                        onClick={() => {
-                          setRagQuestion(item.question);
-                          setRagAnswer(item.answer);
-                          setRagSources([]);
-                        }}
-                      >
-                        <strong>{item.question.slice(0, 45)}</strong>
+                  knowledgeHistory.map((item) => (
+                    <div
+                      key={item.id}
+                      className="session-item"
+                      onClick={() => {
+                        setRagQuestion(item.question);
+                        setRagAnswer(item.answer);
+                      }}
+                    >
+                      <div>
+                        <strong>{item.question}</strong>
+                        <span>{item.model_name}</span>
+                      </div>
 
-                        <span>
-                          {item.source_count || 0} sources •{" "}
-                          {item.created_at
-                            ? new Date(item.created_at).toLocaleDateString()
-                            : "Saved"}
-                        </span>
-
+                      <div className="session-actions">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1069,8 +1054,29 @@ function App() {
                           🗑
                         </button>
                       </div>
-                    ))
+                    </div>
+                  ))
                 )}
+              </div>
+            </>
+          )}
+          {activePanel === "dashboard" && (
+            <>
+              <div className="session-search-title">Dashboard</div>
+
+              <div className="session-empty">
+                AI usage statistics, quota tracking, recent activity and
+                performance metrics.
+              </div>
+            </>
+          )}
+          {activePanel === "settings" && (
+            <>
+              <div className="session-search-title">Settings</div>
+
+              <div className="session-empty">
+                Configure models, quotas, source visibility and streaming
+                preferences.
               </div>
             </>
           )}
