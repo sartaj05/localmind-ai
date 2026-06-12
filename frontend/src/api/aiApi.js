@@ -117,3 +117,10 @@ export const streamRAGAsk = (sessionId, data) => {
     }
   );
 };
+export const getAIPreferences = () => {
+  return apiClient.get("/ai/preferences/");
+};
+
+export const updateAIPreferences = (data) => {
+  return apiClient.patch("/ai/preferences/", data);
+};

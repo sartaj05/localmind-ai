@@ -21,6 +21,8 @@ import {
   askRAG,
   streamRAGAsk,
   getModels,
+  getAIPreferences,
+  updateAIPreferences,
 } from "./api/aiApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -44,6 +46,9 @@ function App() {
   const [selectedModel, setSelectedModel] = useState(
     localStorage.getItem("selected_model") || ""
   );
+
+  const [aiPreferences, setAiPreferences] = useState(null);
+  const [savingPreferences, setSavingPreferences] = useState(false);
 
   const [documents, setDocuments] = useState([]);
   const [documentSearch, setDocumentSearch] = useState("");
@@ -105,17 +110,29 @@ function App() {
     }
   };
 
+  const loadAIPreferences = async () => {
+    try {
+      const res = await getAIPreferences();
+      const pref = res.data.result;
+
+      setAiPreferences(pref);
+
+      if (pref?.default_model) {
+        setSelectedModel(pref.default_model);
+        localStorage.setItem("selected_model", pref.default_model);
+      }
+    } catch {
+      showPopup("Failed to load AI preferences", "error");
+    }
+  };
+
   const loadSessions = async (view = sessionView) => {
     try {
       let res;
 
-      if (view === "archive") {
-        res = await getArchivedSessions();
-      } else if (view === "trash") {
-        res = await getTrashSessions();
-      } else {
-        res = await getSessions();
-      }
+      if (view === "archive") res = await getArchivedSessions();
+      else if (view === "trash") res = await getTrashSessions();
+      else res = await getSessions();
 
       const list = normalizeList(res);
       setSessions(list);
@@ -139,6 +156,61 @@ function App() {
     const model = event.target.value;
     setSelectedModel(model);
     localStorage.setItem("selected_model", model);
+
+    if (aiPreferences) {
+      setAiPreferences((prev) => ({
+        ...prev,
+        default_model: model,
+      }));
+    }
+  };
+
+  const handlePreferenceChange = (field, value) => {
+    setAiPreferences((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleSavePreferences = async () => {
+    if (!aiPreferences) return;
+
+    setSavingPreferences(true);
+
+    try {
+      const payload = {
+        default_model: aiPreferences.default_model || selectedModel,
+        rag_top_k: Number(aiPreferences.rag_top_k || 3),
+        show_sources: Boolean(aiPreferences.show_sources),
+        auto_generate_title: Boolean(aiPreferences.auto_generate_title),
+        stream_format: aiPreferences.stream_format || "plain",
+        daily_request_limit: Number(aiPreferences.daily_request_limit || 100),
+        max_prompt_characters: Number(aiPreferences.max_prompt_characters || 8000),
+      };
+
+      const res = await updateAIPreferences(payload);
+      const updated = res.data.result;
+
+      setAiPreferences(updated);
+
+      if (updated?.default_model) {
+        setSelectedModel(updated.default_model);
+        localStorage.setItem("selected_model", updated.default_model);
+      }
+
+      showPopup("AI preferences saved", "success");
+    } catch (error) {
+      showPopup(
+        error.response?.data?.error?.message || "Failed to save preferences",
+        "error"
+      );
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
+
+  const handleResetPreferenceDraft = () => {
+    loadAIPreferences();
   };
 
   const handlePanelChange = async (panel) => {
@@ -146,6 +218,11 @@ function App() {
 
     if (panel === "knowledge") {
       await loadDocuments();
+    }
+
+    if (panel === "settings") {
+      await loadModels();
+      await loadAIPreferences();
     }
   };
 
@@ -174,6 +251,7 @@ function App() {
       if (!isLoggedIn) return;
 
       await loadModels();
+      await loadAIPreferences();
 
       const list = await loadSessions("active");
       const savedSessionId = localStorage.getItem("active_session_id");
@@ -184,11 +262,8 @@ function App() {
         (session) => String(session.id) === String(savedSessionId)
       );
 
-      if (foundSession) {
-        await openSession(foundSession);
-      } else {
-        localStorage.removeItem("active_session_id");
-      }
+      if (foundSession) await openSession(foundSession);
+      else localStorage.removeItem("active_session_id");
     };
 
     restoreSession();
@@ -221,10 +296,7 @@ function App() {
       setIsLoggedIn(true);
       showPopup("Login successful", "success");
     } catch (error) {
-      showPopup(
-        error.response?.data?.error?.message || "Login failed",
-        "error"
-      );
+      showPopup(error.response?.data?.error?.message || "Login failed", "error");
     }
   };
 
@@ -235,10 +307,7 @@ function App() {
       setMode("login");
       setPassword("");
     } catch (error) {
-      showPopup(
-        error.response?.data?.error?.message || "Register failed",
-        "error"
-      );
+      showPopup(error.response?.data?.error?.message || "Register failed", "error");
     }
   };
 
@@ -318,10 +387,7 @@ function App() {
       setMessages(detail?.messages || []);
       localStorage.setItem("active_session_id", String(session.id));
     } catch (error) {
-      showPopup(
-        error.response?.data?.error?.message || "Message failed",
-        "error"
-      );
+      showPopup(error.response?.data?.error?.message || "Message failed", "error");
     } finally {
       setLoading(false);
     }
@@ -453,8 +519,6 @@ function App() {
   };
 
   const handleUploadDocuments = async () => {
-    console.log("Upload clicked:", selectedFiles);
-
     if (selectedFiles.length === 0) {
       showPopup("Please select files first", "error");
       return;
@@ -463,23 +527,9 @@ function App() {
     setUploadingDocs(true);
 
     try {
-      for (const file of selectedFiles) {
-        console.log("Uploading file:", file.name, file.type, file.size);
-
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("title", file.name);
-
-        const res = await uploadKnowledgeDocument(formData);
-        console.log("Upload response:", res.data);
-      }
-
-      setSelectedFiles([]);
-      await loadDocuments();
+      await uploadSelectedFilesIfAny();
       showPopup("Documents uploaded successfully", "success");
     } catch (error) {
-      console.error("Upload failed:", error.response?.data || error);
-
       showPopup(
         error.response?.data?.error?.message ||
           error.response?.data?.error ||
@@ -542,7 +592,7 @@ function App() {
       const res = await askRAG({
         question: ragQuestion,
         model: selectedModel,
-        top_k: 5,
+        top_k: aiPreferences?.rag_top_k || 5,
       });
 
       setRagAnswer(res.data.answer || "");
@@ -550,8 +600,6 @@ function App() {
 
       showPopup("Knowledge answer generated", "success");
     } catch (error) {
-      console.error("Knowledge ask failed:", error.response?.data || error);
-
       showPopup(
         error.response?.data?.error?.message ||
           error.response?.data?.error ||
@@ -590,7 +638,7 @@ function App() {
       const response = await streamRAGAsk(session.id, {
         message: ragQuestion,
         model: selectedModel,
-        top_k: 5,
+        top_k: aiPreferences?.rag_top_k || 5,
       });
 
       if (!response.ok) {
@@ -616,14 +664,7 @@ function App() {
 
       showPopup("Streaming answer completed", "success");
     } catch (error) {
-      console.error("Streaming RAG failed:", error);
-
-      showPopup(
-        error.response?.data?.error?.message ||
-          error.message ||
-          "Streaming RAG failed",
-        "error"
-      );
+      showPopup(error.message || "Streaming RAG failed", "error");
     } finally {
       setStreamingRag(false);
     }
@@ -733,7 +774,11 @@ function App() {
             <div>
               <h2>MindSpace</h2>
               <p>
-                {activePanel === "chat" ? "Session galaxy" : "Knowledge vault"}
+                {activePanel === "chat"
+                  ? "Session galaxy"
+                  : activePanel === "knowledge"
+                    ? "Knowledge vault"
+                    : "AI control room"}
               </p>
             </div>
 
@@ -759,6 +804,13 @@ function App() {
               onClick={() => handlePanelChange("knowledge")}
             >
               Knowledge
+            </button>
+
+            <button
+              className={activePanel === "settings" ? "active" : ""}
+              onClick={() => handlePanelChange("settings")}
+            >
+              Settings
             </button>
           </div>
 
@@ -887,6 +939,12 @@ function App() {
               Upload, ask, and stream answers from the main panel.
             </div>
           )}
+
+          {activePanel === "settings" && (
+            <div className="session-empty">
+              Manage default model, RAG behavior, source display, and quota.
+            </div>
+          )}
         </aside>
 
         <main className={sidebarOpen ? "mind-main" : "mind-main expanded"}>
@@ -904,12 +962,16 @@ function App() {
               <h1>
                 {activePanel === "chat"
                   ? activeSession?.title || "LocalMind Workspace"
-                  : "Knowledge Base"}
+                  : activePanel === "knowledge"
+                    ? "Knowledge Base"
+                    : "AI Preferences"}
               </h1>
               <p>
                 {activePanel === "chat"
                   ? "A different AI workspace: session cards, thought stream, and local brain."
-                  : "Upload PDF, DOCX, or TXT files and use them for local RAG answers."}
+                  : activePanel === "knowledge"
+                    ? "Upload PDF, DOCX, or TXT files and use them for local RAG answers."
+                    : "Control model defaults, RAG behavior, sources, and usage limits."}
               </p>
             </div>
 
@@ -974,7 +1036,7 @@ function App() {
                 </button>
               </footer>
             </>
-          ) : (
+          ) : activePanel === "knowledge" ? (
             <section className="knowledge-board">
               <div className="knowledge-upload-card">
                 <h2>Knowledge Base</h2>
@@ -1123,6 +1185,165 @@ function App() {
                   )}
                 </div>
               )}
+            </section>
+          ) : (
+            <section className="settings-board">
+              <div className="settings-card">
+                <div className="settings-head">
+                  <div>
+                    <h2>AI Preferences</h2>
+                    <p>
+                      Manage your default AI behavior for chat and document
+                      answers.
+                    </p>
+                  </div>
+
+                  <button onClick={handleResetPreferenceDraft}>
+                    Reset Draft
+                  </button>
+                </div>
+
+                {!aiPreferences ? (
+                  <div className="session-empty">Loading preferences...</div>
+                ) : (
+                  <>
+                    <div className="settings-grid">
+                      <label className="setting-field">
+                        <span>Default Model</span>
+                        <select
+                          value={aiPreferences.default_model || selectedModel}
+                          onChange={(e) =>
+                            handlePreferenceChange(
+                              "default_model",
+                              e.target.value
+                            )
+                          }
+                        >
+                          {models.length === 0 ? (
+                            <option value={aiPreferences.default_model || ""}>
+                              {aiPreferences.default_model || "Default"}
+                            </option>
+                          ) : (
+                            models.map((model) => (
+                              <option key={model.name} value={model.name}>
+                                {model.name}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </label>
+
+                      <label className="setting-field">
+                        <span>RAG Top K</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="20"
+                          value={aiPreferences.rag_top_k || 3}
+                          onChange={(e) =>
+                            handlePreferenceChange("rag_top_k", e.target.value)
+                          }
+                        />
+                      </label>
+
+                      <label className="setting-field">
+                        <span>Stream Format</span>
+                        <select
+                          value={aiPreferences.stream_format || "plain"}
+                          onChange={(e) =>
+                            handlePreferenceChange(
+                              "stream_format",
+                              e.target.value
+                            )
+                          }
+                        >
+                          <option value="plain">Plain Text</option>
+                          <option value="sse">Server Sent Events</option>
+                        </select>
+                      </label>
+
+                      <label className="setting-field">
+                        <span>Daily Request Limit</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10000"
+                          value={aiPreferences.daily_request_limit || 100}
+                          onChange={(e) =>
+                            handlePreferenceChange(
+                              "daily_request_limit",
+                              e.target.value
+                            )
+                          }
+                        />
+                      </label>
+
+                      <label className="setting-field">
+                        <span>Max Prompt Characters</span>
+                        <input
+                          type="number"
+                          min="100"
+                          max="100000"
+                          value={aiPreferences.max_prompt_characters || 8000}
+                          onChange={(e) =>
+                            handlePreferenceChange(
+                              "max_prompt_characters",
+                              e.target.value
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    <div className="settings-toggles">
+                      <label className="toggle-row">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(aiPreferences.show_sources)}
+                          onChange={(e) =>
+                            handlePreferenceChange(
+                              "show_sources",
+                              e.target.checked
+                            )
+                          }
+                        />
+                        <div>
+                          <strong>Show Sources</strong>
+                          <p>Display document chunks used in RAG answers.</p>
+                        </div>
+                      </label>
+
+                      <label className="toggle-row">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(aiPreferences.auto_generate_title)}
+                          onChange={(e) =>
+                            handlePreferenceChange(
+                              "auto_generate_title",
+                              e.target.checked
+                            )
+                          }
+                        />
+                        <div>
+                          <strong>Auto Generate Chat Titles</strong>
+                          <p>
+                            Create titles automatically from the first user
+                            message.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    <button
+                      className="save-settings-btn"
+                      onClick={handleSavePreferences}
+                      disabled={savingPreferences}
+                    >
+                      {savingPreferences ? "Saving..." : "Save Preferences"}
+                    </button>
+                  </>
+                )}
+              </div>
             </section>
           )}
         </main>
