@@ -36,8 +36,9 @@ import {
   exportAllChatSessionsTXT,
   exportAllChatSessionsJSON,
   clearKnowledgeHistory,
+  exportAllKnowledgeHistoryTXT,
+  exportAllKnowledgeHistoryJSON,
 } from "./api/exportApi";
-
 
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
@@ -212,40 +213,40 @@ function App() {
   };
 
   const handleExportAllChatTXT = async () => {
-  try {
-    const res = await exportAllChatSessionsTXT();
-    downloadBlobFile(res, "all_chat_sessions.txt");
-    showPopup("All chat sessions TXT exported", "success");
-  } catch {
-    showPopup("All chat sessions TXT export failed", "error");
-  }
-};
+    try {
+      const res = await exportAllChatSessionsTXT();
+      downloadBlobFile(res, "all_chat_sessions.txt");
+      showPopup("All chat sessions TXT exported", "success");
+    } catch {
+      showPopup("All chat sessions TXT export failed", "error");
+    }
+  };
 
-const handleExportAllChatJSON = async () => {
-  try {
-    const res = await exportAllChatSessionsJSON();
-    downloadBlobFile(res, "all_chat_sessions.json");
-    showPopup("All chat sessions JSON exported", "success");
-  } catch {
-    showPopup("All chat sessions JSON export failed", "error");
-  }
-};
+  const handleExportAllChatJSON = async () => {
+    try {
+      const res = await exportAllChatSessionsJSON();
+      downloadBlobFile(res, "all_chat_sessions.json");
+      showPopup("All chat sessions JSON exported", "success");
+    } catch {
+      showPopup("All chat sessions JSON export failed", "error");
+    }
+  };
 
-const handleClearKnowledgeHistory = async () => {
-  const ok = window.confirm("Clear all knowledge history?");
-  if (!ok) return;
+  const handleClearKnowledgeHistory = async () => {
+    const ok = window.confirm("Clear all knowledge history?");
+    if (!ok) return;
 
-  try {
-    await clearKnowledgeHistory();
-    setKnowledgeHistory([]);
-    setRagQuestion("");
-    setRagAnswer("");
-    setRagSources([]);
-    showPopup("Knowledge history cleared", "success");
-  } catch {
-    showPopup("Clear knowledge history failed", "error");
-  }
-};
+    try {
+      await clearKnowledgeHistory();
+      setKnowledgeHistory([]);
+      setRagQuestion("");
+      setRagAnswer("");
+      setRagSources([]);
+      showPopup("Knowledge history cleared", "success");
+    } catch {
+      showPopup("Clear knowledge history failed", "error");
+    }
+  };
 
   const handleExportKnowledgeTXT = async (item) => {
     try {
@@ -287,24 +288,24 @@ const handleClearKnowledgeHistory = async () => {
     }
   };
   const handleExportAllKnowledgeTXT = async () => {
-  try {
-    const res = await exportAllKnowledgeHistoryTXT();
-    downloadBlobFile(res, "all_knowledge_history.txt");
-    showPopup("All knowledge TXT exported", "success");
-  } catch {
-    showPopup("All knowledge TXT export failed", "error");
-  }
-};
+    try {
+      const res = await exportAllKnowledgeHistoryTXT();
+      downloadBlobFile(res, "all_knowledge_history.txt");
+      showPopup("All knowledge TXT exported", "success");
+    } catch {
+      showPopup("All knowledge TXT export failed", "error");
+    }
+  };
 
-const handleExportAllKnowledgeJSON = async () => {
-  try {
-    const res = await exportAllKnowledgeHistoryJSON();
-    downloadBlobFile(res, "all_knowledge_history.json");
-    showPopup("All knowledge JSON exported", "success");
-  } catch {
-    showPopup("All knowledge JSON export failed", "error");
-  }
-};
+  const handleExportAllKnowledgeJSON = async () => {
+    try {
+      const res = await exportAllKnowledgeHistoryJSON();
+      downloadBlobFile(res, "all_knowledge_history.json");
+      showPopup("All knowledge JSON exported", "success");
+    } catch {
+      showPopup("All knowledge JSON export failed", "error");
+    }
+  };
   const loadDashboardData = async () => {
     try {
       const [dailyRes, summaryRes] = await Promise.all([
@@ -1160,10 +1161,17 @@ const handleExportAllKnowledgeJSON = async () => {
             <>
               <div className="session-search-title">Knowledge History</div>
               <div className="export-all-row">
-                <button onClick={handleExportAllKnowledgeTXT}>Export All TXT</button>
-                <button onClick={handleExportAllKnowledgeJSON}>Export All JSON</button>
+                <button onClick={handleExportAllKnowledgeTXT}>
+                  Export All TXT
+                </button>
+                <button onClick={handleExportAllKnowledgeJSON}>
+                  Export All JSON
+                </button>
               </div>
-              <button className="clear-history-btn" onClick={handleClearKnowledgeHistory}>
+              <button
+                className="clear-history-btn"
+                onClick={handleClearKnowledgeHistory}
+              >
                 Clear Knowledge History
               </button>
               <div className="session-list">

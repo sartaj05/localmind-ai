@@ -12,3 +12,13 @@ export const exportAllChatSessionsJSON = () =>
 
 export const clearKnowledgeHistory = () =>
   apiClient.delete("/ai/knowledge-history/clear/");
+
+export const exportAllKnowledgeHistoryTXT = () =>
+  apiClient.get("/ai/knowledge-history/export/all/txt/", {
+    responseType: "blob",
+  });
+
+export const exportAllKnowledgeHistoryJSON = () =>
+  apiClient.get("/ai/knowledge-history/export/all/json/", {
+    responseType: "blob",
+  });
