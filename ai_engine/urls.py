@@ -76,6 +76,11 @@ from .export_views import (
     ExportAllChatSessionsJSONView,
     ClearKnowledgeHistoryView,
 )
+from .dashboard_views import (
+    DashboardDailyRequestsView,
+    DashboardModelUsageView,
+    DashboardSuccessRateView,
+)
 from .views import StreamAIView
 urlpatterns = [
     path("ask/", AskAIView.as_view(), name="ask-ai"),
@@ -354,5 +359,22 @@ urlpatterns = [
         "knowledge-history/clear/",
         ClearKnowledgeHistoryView.as_view(),
         name="clear-knowledge-history",
+    ),
+    path(
+        "dashboard/daily-requests/",
+        DashboardDailyRequestsView.as_view(),
+        name="dashboard-daily-requests",
+    ),
+
+    path(
+        "dashboard/model-usage/",
+        DashboardModelUsageView.as_view(),
+        name="dashboard-model-usage",
+    ),
+
+    path(
+        "dashboard/success-rate/",
+        DashboardSuccessRateView.as_view(),
+        name="dashboard-success-rate",
     ),
 ]
