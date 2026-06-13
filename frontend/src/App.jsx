@@ -40,7 +40,11 @@ import {
   exportAllKnowledgeHistoryTXT,
   exportAllKnowledgeHistoryJSON,
 } from "./api/exportApi";
-
+import {
+  getDashboardDailyRequests,
+  getDashboardModelUsage,
+  getDashboardSuccessRate,
+} from "./api/dashboardApi";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
 
@@ -82,6 +86,9 @@ function App() {
   const [previewDocument, setPreviewDocument] = useState(null);
   const [dailyUsage, setDailyUsage] = useState(null);
   const [dashboardSummary, setDashboardSummary] = useState(null);
+  const [dailyRequestsChart, setDailyRequestsChart] = useState([]);
+  const [modelUsageChart, setModelUsageChart] = useState([]);
+  const [successRateChart, setSuccessRateChart] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [knowledgeHistory, setKnowledgeHistory] = useState([]);
@@ -332,13 +339,26 @@ function App() {
   };
   const loadDashboardData = async () => {
     try {
-      const [dailyRes, summaryRes] = await Promise.all([
+      const [
+        dailyRes,
+        summaryRes,
+        dailyChartRes,
+        modelUsageRes,
+        successRateRes,
+      ] = await Promise.all([
         getDailyUsage(),
         getDashboardSummary(),
+        getDashboardDailyRequests(),
+        getDashboardModelUsage(),
+        getDashboardSuccessRate(),
       ]);
 
       setDailyUsage(dailyRes.data);
       setDashboardSummary(summaryRes.data.summary);
+
+      setDailyRequestsChart(dailyChartRes.data.results || []);
+      setModelUsageChart(modelUsageRes.data.results || []);
+      setSuccessRateChart(successRateRes.data.results || []);
     } catch {
       showPopup("Failed to load dashboard", "error");
     }
@@ -1844,8 +1864,9 @@ function App() {
                 </div>
               </div>
               <DashboardCharts
-                dailyUsage={dailyUsage}
-                dashboardSummary={dashboardSummary}
+                dailyRequests={dailyRequestsChart}
+                modelUsage={modelUsageChart}
+                successRate={successRateChart}
               />
             </section>
           )}
