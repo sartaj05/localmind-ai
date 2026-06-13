@@ -32,6 +32,7 @@ import {
   exportChatSessionTXT,
   exportChatSessionJSON,
 } from "./api/aiApi";
+import DashboardCharts from "./components/DashboardCharts";
 import {
   exportAllChatSessionsTXT,
   exportAllChatSessionsJSON,
@@ -263,8 +264,8 @@ function App() {
     } catch (error) {
       showPopup(
         error.response?.data?.error ||
-          error.response?.data?.error?.message ||
-          "Clear knowledge history failed",
+        error.response?.data?.error?.message ||
+        "Clear knowledge history failed",
         "error",
       );
     } finally {
@@ -751,9 +752,9 @@ function App() {
     } catch (error) {
       showPopup(
         error.response?.data?.error?.message ||
-          error.response?.data?.error ||
-          error.response?.data?.message ||
-          "Document upload failed",
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        "Document upload failed",
         "error",
       );
     } finally {
@@ -823,9 +824,9 @@ function App() {
     } catch (error) {
       showPopup(
         error.response?.data?.error?.message ||
-          error.response?.data?.error ||
-          error.response?.data?.message ||
-          "Knowledge ask failed",
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        "Knowledge ask failed",
         "error",
       );
     } finally {
@@ -1129,9 +1130,8 @@ function App() {
                   filteredSessions.map((session) => (
                     <div
                       key={session.id}
-                      className={`session-item ${
-                        activeSession?.id === session.id ? "active" : ""
-                      }`}
+                      className={`session-item ${activeSession?.id === session.id ? "active" : ""
+                        }`}
                       onClick={() => openSession(session)}
                     >
                       <div>
@@ -1843,6 +1843,10 @@ function App() {
                   </strong>
                 </div>
               </div>
+              <DashboardCharts
+                dailyUsage={dailyUsage}
+                dashboardSummary={dashboardSummary}
+              />
             </section>
           )}
         </main>
