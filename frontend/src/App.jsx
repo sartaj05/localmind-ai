@@ -1410,14 +1410,14 @@ function App() {
             </div>
           )}
           {activePanel === "prompts" && (
-  <>
-    <div className="session-search-title">Prompt Library</div>
+            <>
+              <div className="session-search-title">Prompt Library</div>
 
-    <div className="session-empty">
-      Save reusable prompts, pin favorites, edit templates, and use them in chat.
-    </div>
-  </>
-)}
+              <div className="session-empty">
+                Save reusable prompts, pin favorites, edit templates, and use them in chat.
+              </div>
+            </>
+          )}
         </aside>
 
         <main className={sidebarOpen ? "mind-main" : "mind-main expanded"}>
@@ -1838,7 +1838,7 @@ function App() {
               }}
             />
           ) : (
-            
+
             <section className="dashboard-board">
               <div className="dashboard-head-card">
                 <div>
