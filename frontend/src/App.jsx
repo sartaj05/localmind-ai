@@ -45,6 +45,7 @@ import {
   getDashboardModelUsage,
   getDashboardSuccessRate,
 } from "./api/dashboardApi";
+import PromptLibrary from "./components/PromptLibrary";
 import { loginUser, registerUser } from "./api/authApi";
 import "./App.css";
 
@@ -1065,7 +1066,9 @@ function App() {
                     ? "Knowledge vault"
                     : activePanel === "settings"
                       ? "AI control room"
-                      : "Usage dashboard"}
+                      : activePanel === "dashboard"
+                        ? "Usage dashboard"
+                        : "Prompt vault"}
               </p>
             </div>
 
@@ -1104,6 +1107,12 @@ function App() {
               onClick={() => handlePanelChange("dashboard")}
             >
               Dashboard
+            </button>
+            <button
+              className={activePanel === "prompts" ? "active" : ""}
+              onClick={() => handlePanelChange("prompts")}
+            >
+              Prompts
             </button>
           </div>
 
@@ -1400,6 +1409,15 @@ function App() {
               </div>
             </div>
           )}
+          {activePanel === "prompts" && (
+  <>
+    <div className="session-search-title">Prompt Library</div>
+
+    <div className="session-empty">
+      Save reusable prompts, pin favorites, edit templates, and use them in chat.
+    </div>
+  </>
+)}
         </aside>
 
         <main className={sidebarOpen ? "mind-main" : "mind-main expanded"}>
@@ -1421,7 +1439,9 @@ function App() {
                     ? "Knowledge Base"
                     : activePanel === "settings"
                       ? "AI Preferences"
-                      : "Usage Dashboard"}
+                      : activePanel === "dashboard"
+                        ? "Usage Dashboard"
+                        : "Prompt Library"}
               </h1>
               <p>
                 {activePanel === "chat"
@@ -1430,7 +1450,9 @@ function App() {
                     ? "Upload PDF, DOCX, or TXT files and use them for local RAG answers."
                     : activePanel === "settings"
                       ? "Control model defaults, RAG behavior, sources, and usage limits."
-                      : "Track daily quota, requests, documents, sessions, and response health."}
+                      : activePanel === "dashboard"
+                        ? "Track daily quota, requests, documents, sessions, and response health."
+                        : "Save reusable prompts and send them into chat instantly."}
               </p>
             </div>
 
@@ -1804,7 +1826,19 @@ function App() {
                 )}
               </div>
             </section>
+
+          ) : activePanel === "prompts" ? (
+            <PromptLibrary
+              showPopup={showPopup}
+              onUsePrompt={(text) => {
+                setActivePanel("chat");
+                localStorage.setItem("active_panel", "chat");
+                setPrompt(text);
+                showPopup("Prompt added to chat box", "success");
+              }}
+            />
           ) : (
+            
             <section className="dashboard-board">
               <div className="dashboard-head-card">
                 <div>
