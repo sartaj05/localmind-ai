@@ -81,6 +81,11 @@ from .dashboard_views import (
     DashboardModelUsageView,
     DashboardSuccessRateView,
 )
+from .prompt_views import (
+    PromptTemplateListCreateView,
+    PromptTemplateDetailView,
+    TogglePinPromptTemplateView,
+)
 from .views import StreamAIView
 urlpatterns = [
     path("ask/", AskAIView.as_view(), name="ask-ai"),
@@ -376,5 +381,22 @@ urlpatterns = [
         "dashboard/success-rate/",
         DashboardSuccessRateView.as_view(),
         name="dashboard-success-rate",
+    ),
+    path(
+        "prompts/",
+        PromptTemplateListCreateView.as_view(),
+        name="prompt-template-list-create",
+    ),
+
+    path(
+        "prompts/<int:pk>/",
+        PromptTemplateDetailView.as_view(),
+        name="prompt-template-detail",
+    ),
+
+    path(
+        "prompts/<int:pk>/toggle-pin/",
+        TogglePinPromptTemplateView.as_view(),
+        name="prompt-template-toggle-pin",
     ),
 ]
